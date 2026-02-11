@@ -1,25 +1,7 @@
 import { Fragment, useState } from 'react'
-import { Dialog, Transition, Tab } from '@headlessui/react'
-import { X, Type, Monitor } from 'lucide-react'
-import clsx from 'clsx'
-
-const FONTS_INTERFACE = [
-  { name: 'System Default', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
-  { name: 'Inter', value: '"Inter", sans-serif' },
-  { name: 'Roboto', value: '"Roboto", sans-serif' },
-  { name: 'Segoe UI', value: '"Segoe UI", sans-serif' },
-  { name: 'Helvetica Neue', value: '"Helvetica Neue", Arial, sans-serif' },
-];
-
-const FONTS_TEXT = [
-  { name: 'Maple Mono', value: '"Maple Mono NF CN"'},
-  { name: 'SF Mono (Default)', value: '"SF Mono", "JetBrains Mono", "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
-  { name: 'JetBrains Mono', value: '"JetBrains Mono", monospace' },
-  { name: 'Fira Code', value: '"Fira Code", monospace' },
-  { name: 'Source Code Pro', value: '"Source Code Pro", monospace' },
-  { name: 'Consolas', value: 'Consolas, monospace' },
-  { name: 'System Sans', value: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
-];
+import { Dialog, Transition } from '@headlessui/react'
+import { X, Type } from 'lucide-react'
+import { FONTS_INTERFACE, FONTS_TEXT } from '../constants'
 
 export default function SettingsModal({ isOpen, onClose, settings, onUpdateSettings }) {
   const [forceCustom, setForceCustom] = useState(false);

@@ -1,35 +1,40 @@
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useMemo } from 'react';
 import { Combobox, Dialog, Transition } from '@headlessui/react';
-import { Search, File, Command, FolderOpen, Save, Monitor } from 'lucide-react';
+import { Search, File, Command } from 'lucide-react';
 import Fuse from 'fuse.js';
 import clsx from 'clsx';
+
+/**
+ * Recursively flatten file tree into array
+ */
+const flattenFiles = (node, acc = []) => {
+  if (!node) return acc;
+  if (!node.isDir) {
+    acc.push(node);
+  }
+  if (node.children) {
+    node.children.forEach(child => flattenFiles(child, acc));
+  }
+  return acc;
+};
 
 const CommandPalette = ({ isOpen, setIsOpen, files, onFileSelect, commands }) => {
   const [query, setQuery] = useState('');
 
-  // Flatten file tree for search
-  const flattenFiles = (node, acc = []) => {
-    if (!node) return acc;
-    if (!node.isDir) {
-      acc.push(node);
-    }
-    if (node.children) {
-      node.children.forEach(child => flattenFiles(child, acc));
-    }
-    return acc;
-  };
+  // Memoize flattened files to avoid recalculation
+  const flatFiles = useMemo(() => files ? flattenFiles(files) : [], [files]);
 
-  const flatFiles = files ? flattenFiles(files) : [];
-
-  const allItems = [
+  // Memoize all items array
+  const allItems = useMemo(() => [
     ...commands.map(c => ({ ...c, type: 'command' })),
     ...flatFiles.map(f => ({ ...f, type: 'file', id: f.path, label: f.name }))
-  ];
+  ], [commands, flatFiles]);
 
-  const fuse = new Fuse(allItems, {
+  // Memoize Fuse instance to avoid recreation
+  const fuse = useMemo(() => new Fuse(allItems, {
     keys: ['label', 'name'],
     threshold: 0.3,
-  });
+  }), [allItems]);
 
   const filteredItems = query === '' ? allItems.slice(0, 10) : fuse.search(query).map(result => result.item).slice(0, 10);
 

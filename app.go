@@ -9,8 +9,8 @@ import (
 
 // App struct
 type App struct {
-	ctx     context.Context
-	fm      *files.Manager
+	ctx context.Context
+	fm  *files.Manager
 }
 
 // NewApp creates a new App application struct
@@ -44,6 +44,11 @@ func (a *App) OpenFolder() (string, error) {
 	}
 
 	return dir, nil
+}
+
+// SetFolder sets the base path without opening a dialog
+func (a *App) SetFolder(path string) error {
+	return a.fm.SetBasePath(path)
 }
 
 // ListFiles returns the file tree structure

@@ -7,11 +7,11 @@ import (
 
 // FileNode represents a file or directory in the file tree
 type FileNode struct {
-	Name         string    `json:"name"`
-	Path         string    `json:"path"`
-	IsDir        bool      `json:"isDir"`
-	ModifiedTime JSONTime  `json:"modifiedTime"`
-	Size         int64     `json:"size"`
+	Name         string      `json:"name"`
+	Path         string      `json:"path"`
+	IsDir        bool        `json:"isDir"`
+	ModifiedTime JSONTime    `json:"modifiedTime"`
+	Size         int64       `json:"size"`
 	Children     []*FileNode `json:"children,omitempty"`
 }
 

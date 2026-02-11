@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { syntaxHighlighting, defaultHighlightStyle, HighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
-import { MatchDecorator, ViewPlugin, Decoration, WidgetType } from '@codemirror/view';
+import { MatchDecorator, ViewPlugin, Decoration } from '@codemirror/view';
 import MarkdownIt from 'markdown-it';
 import markdownItGithubAlerts from 'markdown-it-github-alerts';
 import clsx from 'clsx';
 import { Split, Eye, Edit3, Save } from 'lucide-react';
+import { VIEW_MODES } from '../constants';
 
 // --- Custom Syntax Highlighting (Obsidian-like) ---
 const obsidianHighlightStyle = HighlightStyle.define([
@@ -34,29 +35,7 @@ const wikiLinkDecorator = new MatchDecorator({
   decoration: Decoration.mark({ class: 'text-obsidian-purple hover:underline cursor-pointer' }),
 });
 
-const obsidianExtensionsPlugin = ViewPlugin.fromClass(
-  class {
-    constructor(view) {
-      this.highlightDeco = highlightDecorator.createDeco(view);
-      this.wikiDeco = wikiLinkDecorator.createDeco(view);
-    }
-    update(update) {
-      this.highlightDeco = highlightDecorator.updateDeco(update, this.highlightDeco);
-      this.wikiDeco = wikiLinkDecorator.updateDeco(update, this.wikiDeco);
-    }
-  },
-  {
-    decorations: (v) => {
-      const highlight = v.highlightDeco || Decoration.none;
-      const wiki = v.wikiDeco || Decoration.none;
-      return highlight.update({add: wiki.iter(), sort: true}); // Merging decorations is tricky, simplified here
-      // Better approach: use multiple plugins or a single one carefully.
-      // For now let's just use one plugin for simplicity or separate them in the extensions array.
-    },
-  }
-);
-
-// We need separate plugins to avoid merging issues easily
+// Separate plugins for highlight and wiki-link decorations
 const highlightPlugin = ViewPlugin.define(
   (view) => ({
     decorations: highlightDecorator.createDeco(view),
@@ -92,9 +71,23 @@ const editorTheme = EditorView.theme({
 const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
   const editorRef = useRef(null);
   const viewRef = useRef(null);
-  const [viewMode, setViewMode] = useState('split'); // 'edit', 'preview', 'split'
+  const previewRef = useRef(null);
+  const isScrollingRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const onChangeRef = useRef(onChange);
+  const onSaveRef = useRef(onSave); // Keep ref to latest onSave callback
+  const [viewMode, setViewMode] = useState(VIEW_MODES.SPLIT);
   const [unsaved, setUnsaved] = useState(false);
-  
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
+  // Keep onSaveRef updated
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
+
   // Markdown It setup
   const md = useMemo(() => {
     const m = new MarkdownIt({
@@ -102,11 +95,19 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
       linkify: true,
       typographer: true,
     });
-    
+
     // Enable GitHub Alerts (compatible with Obsidian Callouts: > [!NOTE] etc.)
     m.use(markdownItGithubAlerts);
-    
+
     return m;
+  }, []);
+
+  // Save handler using ref to avoid stale closure
+  const handleSave = useCallback(() => {
+    if (viewRef.current) {
+      onSaveRef.current?.(viewRef.current.state.doc.toString());
+      setUnsaved(false);
+    }
   }, []);
 
   // Initialize Editor
@@ -122,11 +123,11 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
         drawSelection(),
         EditorState.allowMultipleSelections.of(true),
         markdown({ base: markdownLanguage, codeLanguages: languages }),
-        syntaxHighlighting(obsidianHighlightStyle, { fallback: true }), // Use our custom style
+        syntaxHighlighting(obsidianHighlightStyle, { fallback: true }),
         editorTheme,
         highlightActiveLine(),
         keymap.of([
-            ...defaultKeymap, 
+            ...defaultKeymap,
             ...historyKeymap,
             { key: "Mod-s", run: () => { handleSave(); return true; } }
         ]),
@@ -135,7 +136,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const newContent = update.state.doc.toString();
-            onChange(newContent);
+            onChangeRef.current?.(newContent);
             setUnsaved(true);
           }
         }),
@@ -152,7 +153,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
     return () => {
       view.destroy();
     };
-  }, []); // Run once on mount
+  }, [handleSave]);
 
   // Update content if changed externally (e.g. file switch)
   useEffect(() => {
@@ -163,14 +164,53 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
         viewRef.current.dispatch(transaction);
         setUnsaved(false);
     }
-  }, [content]); // Only when content prop changes significantly (e.g. file load)
+  }, [content]);
 
-  const handleSave = () => {
-    if (viewRef.current) {
-      onSave(viewRef.current.state.doc.toString());
-      setUnsaved(false);
-    }
-  };
+  // Sync Scroll Effect
+  useEffect(() => {
+    if (!viewRef.current || !previewRef.current || viewMode === 'edit') return;
+
+    const editorScroller = viewRef.current.scrollDOM;
+    const previewScroller = previewRef.current;
+
+    const handleEditorScroll = () => {
+      if (isScrollingRef.current === 'preview') return;
+      isScrollingRef.current = 'editor';
+      
+      const percentage = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
+      
+      if (isFinite(percentage)) {
+          const previewScrollTop = percentage * (previewScroller.scrollHeight - previewScroller.clientHeight);
+          previewScroller.scrollTop = previewScrollTop;
+      }
+      
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => { isScrollingRef.current = null; }, 50);
+    };
+
+    const handlePreviewScroll = () => {
+      if (isScrollingRef.current === 'editor') return;
+      isScrollingRef.current = 'preview';
+
+      const percentage = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
+      
+      if (isFinite(percentage)) {
+          const editorScrollTop = percentage * (editorScroller.scrollHeight - editorScroller.clientHeight);
+          editorScroller.scrollTop = editorScrollTop;
+      }
+
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => { isScrollingRef.current = null; }, 50);
+    };
+
+    editorScroller.addEventListener('scroll', handleEditorScroll);
+    previewScroller.addEventListener('scroll', handlePreviewScroll);
+
+    return () => {
+      editorScroller.removeEventListener('scroll', handleEditorScroll);
+      previewScroller.removeEventListener('scroll', handlePreviewScroll);
+    };
+  }, [viewMode, content]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -227,7 +267,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
             </div>
 
             {/* Preview Pane */}
-            <div className={clsx("h-full overflow-auto bg-primary p-8 prose font-mono max-w-none transition-all duration-300", 
+            <div ref={previewRef} className={clsx("h-full overflow-auto bg-primary p-8 prose font-mono max-w-none transition-all duration-300", 
                 viewMode === 'edit' ? "hidden" : (viewMode === 'split' ? "w-1/2" : "w-full"),
                 isZenMode && "bg-primary"
             )}>

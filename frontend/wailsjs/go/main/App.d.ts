@@ -17,3 +17,5 @@ export function ReadFile(arg1:string):Promise<files.NoteContent>;
 export function RenameFile(arg1:string,arg2:string):Promise<void>;
 
 export function SaveFile(arg1:string,arg2:string):Promise<void>;
+
+export function SetFolder(arg1:string):Promise<void>;

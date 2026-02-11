@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FolderOpen, X, Monitor, Save, Settings } from 'lucide-react';
-import { OpenFolder, ListFiles, ReadFile, SaveFile } from '../wailsjs/go/main/App';
+import { FolderOpen, X, Monitor, Save, Settings, Menu } from 'lucide-react';
+import { OpenFolder, ListFiles, ReadFile, SaveFile, SetFolder } from '../wailsjs/go/main/App';
 import FileTree from './components/FileTree';
 import Editor from './components/Editor';
 import CommandPalette from './components/CommandPalette';
@@ -18,6 +18,7 @@ function App() {
   
   // UI State
   const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isResizing, setIsResizing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
@@ -31,6 +32,22 @@ function App() {
   });
 
   useEffect(() => {
+    // Load last opened folder
+    const loadLastFolder = async () => {
+      const lastFolder = localStorage.getItem('notebit-last-folder');
+      if (lastFolder) {
+        try {
+          await SetFolder(lastFolder);
+          setBasePath(lastFolder);
+          const tree = await ListFiles();
+          setFileTree(tree);
+        } catch (e) {
+          console.error('Failed to restore folder', e);
+        }
+      }
+    };
+    loadLastFolder();
+
     // Load settings from localStorage
     const saved = localStorage.getItem('notebit-settings');
     if (saved) {
@@ -69,6 +86,7 @@ function App() {
       const path = await OpenFolder();
       if (path) {
         setBasePath(path);
+        localStorage.setItem('notebit-last-folder', path);
         await refreshFileTree();
       }
     } catch (err) {
@@ -227,9 +245,18 @@ function App() {
           isZenMode ? 'hidden' : 'flex'
         )}
       >
-        <div className="flex flex-col">
-          <h1 className="text-lg font-semibold text-normal leading-tight">Notebit</h1>
-          <span className="text-xs text-muted">The Sanctuary</span>
+        <div className="flex items-center">
+            <button
+                className="mr-3 text-muted hover:text-normal transition-colors"
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                title={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
+            >
+                <Menu size={20} />
+            </button>
+            <div className="flex flex-col">
+              <h1 className="text-lg font-semibold text-normal leading-tight">Notebit</h1>
+              <span className="text-xs text-muted">The Sanctuary</span>
+            </div>
         </div>
         <div className="flex gap-3">
           <button
@@ -266,9 +293,9 @@ function App() {
         <aside
           className={clsx(
             'flex flex-col bg-secondary border-r border-modifier-border shrink-0 transition-all duration-300',
-            isZenMode ? 'hidden' : 'flex'
+            (isZenMode || !isSidebarOpen) ? 'hidden' : 'flex'
           )}
-          style={{ width: isZenMode ? 0 : sidebarWidth }}
+          style={{ width: (isZenMode || !isSidebarOpen) ? 0 : sidebarWidth }}
         >
           <div className="px-4 py-3 bg-secondary border-b border-modifier-border">
             <h2 className="text-xs font-bold uppercase tracking-wider text-muted">Files</h2>
@@ -282,7 +309,7 @@ function App() {
         </aside>
 
         {/* Resizer Handle */}
-        {!isZenMode && (
+        {!isZenMode && isSidebarOpen && (
           <div
             className="w-1 bg-transparent hover:bg-accent cursor-col-resize absolute top-0 bottom-0 z-10 transition-colors"
             style={{ left: sidebarWidth }}
