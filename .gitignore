@@ -42,7 +42,9 @@ vendor/
 # ai agent 配置
 .trae
 .claude
+.agents
 
 # 其他
 .wails/
 tmpclaude-*
+参考
