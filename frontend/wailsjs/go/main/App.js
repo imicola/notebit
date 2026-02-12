@@ -14,8 +14,28 @@ export function GetBasePath() {
   return window['go']['main']['App']['GetBasePath']();
 }
 
+export function GetDatabaseStats() {
+  return window['go']['main']['App']['GetDatabaseStats']();
+}
+
+export function GetIndexedFile(arg1) {
+  return window['go']['main']['App']['GetIndexedFile'](arg1);
+}
+
+export function IndexFile(arg1) {
+  return window['go']['main']['App']['IndexFile'](arg1);
+}
+
+export function IsDatabaseInitialized() {
+  return window['go']['main']['App']['IsDatabaseInitialized']();
+}
+
 export function ListFiles() {
   return window['go']['main']['App']['ListFiles']();
+}
+
+export function ListIndexedFiles() {
+  return window['go']['main']['App']['ListIndexedFiles']();
 }
 
 export function OpenFolder() {
@@ -24,6 +44,10 @@ export function OpenFolder() {
 
 export function ReadFile(arg1) {
   return window['go']['main']['App']['ReadFile'](arg1);
+}
+
+export function RemoveFromIndex(arg1) {
+  return window['go']['main']['App']['RemoveFromIndex'](arg1);
 }
 
 export function RenameFile(arg1, arg2) {
@@ -36,4 +60,8 @@ export function SaveFile(arg1, arg2) {
 
 export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
+}
+
+export function UpdateFilePathInIndex(arg1, arg2) {
+  return window['go']['main']['App']['UpdateFilePathInIndex'](arg1, arg2);
 }
