@@ -14,6 +14,10 @@ export function DeleteFile(arg1) {
   return window['go']['main']['App']['DeleteFile'](arg1);
 }
 
+export function FindSimilar(arg1, arg2) {
+  return window['go']['main']['App']['FindSimilar'](arg1, arg2);
+}
+
 export function GenerateEmbedding(arg1) {
   return window['go']['main']['App']['GenerateEmbedding'](arg1);
 }
@@ -48,6 +52,10 @@ export function GetOllamaConfig() {
 
 export function GetOpenAIConfig() {
   return window['go']['main']['App']['GetOpenAIConfig']();
+}
+
+export function GetSimilarityStatus() {
+  return window['go']['main']['App']['GetSimilarityStatus']();
 }
 
 export function IndexFile(arg1) {

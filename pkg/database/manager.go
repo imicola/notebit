@@ -15,6 +15,7 @@ type Manager struct {
 	db       *gorm.DB
 	dbPath   string
 	basePath string
+	repo     *Repository
 	mu       sync.RWMutex
 	initOnce sync.Once
 	initErr  error

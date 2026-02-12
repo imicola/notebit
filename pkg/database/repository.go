@@ -6,18 +6,27 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"gorm.io/gorm"
 )
 
 // Repository provides data access methods
 type Repository struct {
-	db *gorm.DB
+	db                *gorm.DB
+	vectorCache       map[uint][]float32
+	vectorCacheLoaded bool
+	vectorCacheMu     sync.RWMutex
 }
 
 // NewRepository creates a new repository
 func (m *Manager) Repository() *Repository {
-	return &Repository{db: m.db}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.repo == nil {
+		m.repo = &Repository{db: m.db}
+	}
+	return m.repo
 }
 
 // ============ FILE OPERATIONS ============
@@ -71,7 +80,11 @@ func (r *Repository) ListFiles() ([]File, error) {
 
 // DeleteFile removes a file from the index (cascade deletes chunks)
 func (r *Repository) DeleteFile(path string) error {
-	return r.db.Where("path = ?", path).Delete(&File{}).Error
+	err := r.db.Where("path = ?", path).Delete(&File{}).Error
+	if err == nil {
+		r.invalidateVectorCache()
+	}
+	return err
 }
 
 // RenameFile updates a file's path in the index
@@ -112,8 +125,11 @@ func (r *Repository) CreateChunks(fileID uint, chunks []Chunk) error {
 	}
 
 	if len(chunks) > 0 {
-		return r.db.Create(&chunks).Error
+		if err := r.db.Create(&chunks).Error; err != nil {
+			return err
+		}
 	}
+	r.invalidateVectorCache()
 	return nil
 }
 
@@ -136,7 +152,11 @@ func (r *Repository) GetChunkByID(chunkID uint) (*Chunk, error) {
 
 // DeleteChunksForFile removes all chunks associated with a file
 func (r *Repository) DeleteChunksForFile(fileID uint) error {
-	return r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error
+	err := r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error
+	if err == nil {
+		r.invalidateVectorCache()
+	}
+	return err
 }
 
 // ============ TAG OPERATIONS ============
@@ -303,6 +323,7 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 		// Only set embedding timestamp if embedding is provided
 		if len(chunkInput.Embedding) > 0 {
 			chunk.EmbeddingCreatedAt = &now
+			chunk.EmbeddingBlob = floatsToBytes(chunkInput.Embedding)
 		}
 
 		if err := tx.Create(&chunk).Error; err != nil {
@@ -312,5 +333,9 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 	}
 
 	// Commit transaction
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	r.invalidateVectorCache()
+	return nil
 }

@@ -1,12 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FolderOpen, X, Monitor, Save, Settings, Menu } from 'lucide-react';
+import { FolderOpen, X, Monitor, Save, Settings, Menu, Sparkles } from 'lucide-react';
 import { OpenFolder, ListFiles, ReadFile, SaveFile, SetFolder } from '../wailsjs/go/main/App';
 import FileTree from './components/FileTree';
 import Editor from './components/Editor';
 import CommandPalette from './components/CommandPalette';
 import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
+import SimilarNotesSidebar from './components/SimilarNotesSidebar';
+import AIStatusIndicator from './components/AIStatusIndicator';
 import clsx from 'clsx';
+import { SIDEBAR, SEMANTIC_SEARCH } from './constants';
 
 function App() {
   const [fileTree, setFileTree] = useState(null);
@@ -17,13 +20,19 @@ function App() {
   const [error, setError] = useState(null);
   
   // UI State
-  const [sidebarWidth, setSidebarWidth] = useState(280);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR.DEFAULT_WIDTH);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isResizing, setIsResizing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '' });
+
+  // Right sidebar state
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(SEMANTIC_SEARCH.DEFAULT_WIDTH);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+  const [searchTrigger, setSearchTrigger] = useState(0);  // Trigger for search on save
 
   // Settings State
   const [appSettings, setAppSettings] = useState({
@@ -132,6 +141,7 @@ function App() {
     try {
       await SaveFile(currentFile.path, content);
       setCurrentContent(content);
+      setSearchTrigger(prev => prev + 1);  // Trigger similarity search
       showToast('File saved successfully');
     } catch (err) {
       setError(err.message || 'Failed to save file');
@@ -151,7 +161,7 @@ function App() {
   const resize = useCallback(
     (e) => {
       if (isResizing) {
-        setSidebarWidth(Math.max(200, Math.min(e.clientX, 600)));
+        setSidebarWidth(Math.max(SIDEBAR.MIN_WIDTH, Math.min(e.clientX, SIDEBAR.MAX_WIDTH)));
       }
     },
     [isResizing]
@@ -167,6 +177,30 @@ function App() {
       window.removeEventListener('mouseup', stopResizing);
     };
   }, [isResizing, resize, stopResizing]);
+
+  // Right Sidebar Resizing Logic
+  const startResizingRight = useCallback(() => setIsResizingRight(true), []);
+  const stopResizingRight = useCallback(() => setIsResizingRight(false), []);
+  const resizeRight = useCallback(
+    (e) => {
+      if (isResizingRight) {
+        const newWidth = window.innerWidth - e.clientX;
+        setRightSidebarWidth(Math.max(SEMANTIC_SEARCH.MIN_WIDTH, Math.min(newWidth, SEMANTIC_SEARCH.MAX_WIDTH)));
+      }
+    },
+    [isResizingRight]
+  );
+
+  useEffect(() => {
+    if (isResizingRight) {
+      window.addEventListener('mousemove', resizeRight);
+      window.addEventListener('mouseup', stopResizingRight);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resizeRight);
+      window.removeEventListener('mouseup', stopResizingRight);
+    };
+  }, [isResizingRight, resizeRight, stopResizingRight]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -247,6 +281,13 @@ function App() {
       >
         <div className="flex items-center">
             <button
+                className="mr-2 text-muted hover:text-normal transition-colors"
+                onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+                title={isRightSidebarOpen ? "Close Related Notes" : "Open Related Notes"}
+            >
+                <Sparkles size={18} />
+            </button>
+            <button
                 className="mr-3 text-muted hover:text-normal transition-colors"
                 onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                 title={isSidebarOpen ? "Close Sidebar" : "Open Sidebar"}
@@ -254,7 +295,10 @@ function App() {
                 <Menu size={20} />
             </button>
             <div className="flex flex-col">
-              <h1 className="text-lg font-semibold text-normal leading-tight">Notebit</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg font-semibold text-normal leading-tight">Notebit</h1>
+                <AIStatusIndicator />
+              </div>
               <span className="text-xs text-muted">The Sanctuary</span>
             </div>
         </div>
@@ -347,6 +391,25 @@ function App() {
             </div>
           )}
         </div>
+
+        {/* Right Sidebar - Similar Notes */}
+        <SimilarNotesSidebar
+          query={currentContent}
+          triggerSearch={searchTrigger}
+          isOpen={isRightSidebarOpen && !isZenMode}
+          onClose={() => setIsRightSidebarOpen(false)}
+          onNoteClick={(note) => handleFileSelect({ path: note.path, name: note.title })}
+          width={rightSidebarWidth}
+        />
+
+        {/* Right Sidebar Resizer Handle */}
+        {!isZenMode && isRightSidebarOpen && (
+          <div
+            className="w-1 bg-transparent hover:bg-accent cursor-col-resize absolute top-0 bottom-0 z-10 transition-colors"
+            style={{ right: rightSidebarWidth - 4 }}
+            onMouseDown={startResizingRight}
+          />
+        )}
       </main>
     </div>
   );

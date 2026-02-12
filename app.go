@@ -7,6 +7,7 @@ import (
 	"notebit/pkg/config"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
+	"notebit/pkg/knowledge"
 	"notebit/pkg/watcher"
 	"os"
 	"path/filepath"
@@ -21,6 +22,7 @@ type App struct {
 	fm      *files.Manager
 	dbm     *database.Manager
 	ai      *ai.Service
+	ks      *knowledge.Service
 	cfg     *config.Config
 	watcher *watcher.Service
 }
@@ -42,11 +44,16 @@ func NewAppWithConfig(cfg *config.Config) *App {
 	if cfg == nil {
 		cfg = config.New()
 	}
+	fm := files.NewManager()
+	dbm := database.GetInstance()
+	aiService := ai.NewService(cfg)
+
 	return &App{
-		fm:  files.NewManager(),
-		dbm: database.GetInstance(),
+		fm:  fm,
+		dbm: dbm,
 		cfg: cfg,
-		ai:  ai.NewService(cfg),
+		ai:  aiService,
+		ks:  knowledge.NewService(fm, dbm, aiService),
 	}
 }
 
@@ -579,91 +586,49 @@ func (a *App) ProcessDocument(text string) ([]map[string]interface{}, error) {
 
 // IndexFileWithEmbedding indexes a file and generates embeddings for its chunks
 func (a *App) IndexFileWithEmbedding(path string) error {
-	if !a.dbm.IsInitialized() {
-		return fmt.Errorf("database not initialized")
-	}
-
-	// Read file content
-	content, err := a.fm.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	// Get file stats
-	fullPath := filepath.Join(a.fm.GetBasePath(), path)
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return err
-	}
-
-	// Process document to get chunks with embeddings
-	chunks, err := a.ai.ProcessDocument(content.Content)
-	if err != nil {
-		return fmt.Errorf("failed to process document: %w", err)
-	}
-
-	// Convert chunks to database format
-	dbChunks := make([]database.ChunkInput, len(chunks))
-	for i, chunk := range chunks {
-		dbChunks[i] = database.ChunkInput{
-			Content: chunk.Content,
-			Heading: chunk.Heading,
-		}
-		if embedding, ok := chunk.Metadata["embedding"].([]float32); ok {
-			dbChunks[i].Embedding = embedding
-		}
-		if model, ok := chunk.Metadata["embedding_model"].(string); ok {
-			dbChunks[i].EmbeddingModel = model
-		}
-	}
-
-	// Index with embeddings
-	repo := a.dbm.Repository()
-	return repo.IndexFileWithChunks(path, content.Content, info.ModTime().Unix(), info.Size(), dbChunks)
+	return a.ks.IndexFileWithEmbedding(path)
 }
 
 // ReindexAllWithEmbeddings reindexes all files with embeddings
 func (a *App) ReindexAllWithEmbeddings() (map[string]interface{}, error) {
-	if !a.dbm.IsInitialized() {
-		return nil, fmt.Errorf("database not initialized")
-	}
+	return a.ks.ReindexAllWithEmbeddings()
+}
 
-	files, err := a.fm.ListFiles()
+// ============ SEMANTIC SEARCH API METHODS ============
+
+// SimilarNote represents a note with similarity score for semantic search results
+type SimilarNote struct {
+	Path       string  `json:"path"`
+	Title      string  `json:"title"`
+	Content    string  `json:"content"`
+	Heading    string  `json:"heading"`
+	Similarity float32 `json:"similarity"`
+	ChunkID    uint    `json:"chunk_id"`
+}
+
+// FindSimilar finds semantically similar notes based on content
+func (a *App) FindSimilar(content string, limit int) ([]SimilarNote, error) {
+	results, err := a.ks.FindSimilar(content, limit)
 	if err != nil {
 		return nil, err
 	}
 
-	// Collect all markdown files
-	var mdFiles []string
-	collectFiles(files, &mdFiles)
-
-	results := map[string]interface{}{
-		"total":     len(mdFiles),
-		"processed": 0,
-		"failed":    0,
-		"errors":    []string{},
-	}
-
-	for _, path := range mdFiles {
-		if err := a.IndexFileWithEmbedding(path); err != nil {
-			results["failed"] = results["failed"].(int) + 1
-			errs := results["errors"].([]string)
-			results["errors"] = append(errs, fmt.Sprintf("%s: %v", path, err))
-		} else {
-			results["processed"] = results["processed"].(int) + 1
+	// Convert to local struct to maintain API compatibility
+	notes := make([]SimilarNote, len(results))
+	for i, r := range results {
+		notes[i] = SimilarNote{
+			Path:       r.Path,
+			Title:      r.Title,
+			Content:    r.Content,
+			Heading:    r.Heading,
+			Similarity: r.Similarity,
+			ChunkID:    r.ChunkID,
 		}
 	}
-
-	return results, nil
+	return notes, nil
 }
 
-// collectFiles recursively collects all markdown file paths
-func collectFiles(node *files.FileNode, paths *[]string) {
-	if !node.IsDir {
-		*paths = append(*paths, node.Path)
-	} else {
-		for _, child := range node.Children {
-			collectFiles(child, paths)
-		}
-	}
+// GetSimilarityStatus returns the availability status of semantic search
+func (a *App) GetSimilarityStatus() (map[string]interface{}, error) {
+	return a.ks.GetSimilarityStatus()
 }

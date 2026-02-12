@@ -66,3 +66,13 @@ export const SHORTCUTS = {
   COMMAND_PALETTE: 'Cmd+K',
   SAVE_FILE: 'Cmd+S'
 };
+
+// Semantic search constants
+export const SEMANTIC_SEARCH = {
+  DEBOUNCE_MS: 500,
+  DEFAULT_LIMIT: 5,
+  MIN_SIMILARITY: 0.3,
+  DEFAULT_WIDTH: 280,
+  MIN_WIDTH: 200,
+  MAX_WIDTH: 600
+};

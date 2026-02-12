@@ -46,7 +46,8 @@ type Chunk struct {
 
 	// Vector field - using JSON serialization for modernc.org/sqlite compatibility
 	// TODO: Migrate to sqlite-vec extension when available for native vector operations
-	Embedding          []float32  `gorm:"type:json;serializer:json" json:"embedding"` // Vector array for similarity search
+	Embedding          []float32  `gorm:"type:json;serializer:json" json:"embedding"` // Legacy: Vector array for similarity search
+	EmbeddingBlob      []byte     `gorm:"type:blob" json:"-"`                         // Optimized: Binary storage for fast retrieval
 	EmbeddingModel     string     `gorm:"size:64" json:"embedding_model"`             // Model name/version
 	EmbeddingCreatedAt *time.Time `json:"embedding_created_at"`                       // NULL until embedded
 	EmbeddingDim       int        `gorm:"-" json:"embedding_dim,omitempty"`           // Computed field for UI

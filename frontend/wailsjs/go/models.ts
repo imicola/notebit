@@ -317,3 +317,30 @@ export namespace gorm {
 
 }
 
+export namespace main {
+	
+	export class SimilarNote {
+	    path: string;
+	    title: string;
+	    content: string;
+	    heading: string;
+	    similarity: number;
+	    chunk_id: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SimilarNote(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.title = source["title"];
+	        this.content = source["content"];
+	        this.heading = source["heading"];
+	        this.similarity = source["similarity"];
+	        this.chunk_id = source["chunk_id"];
+	    }
+	}
+
+}
+
