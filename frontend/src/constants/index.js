@@ -28,7 +28,8 @@ export const ERRORS = {
   LOAD_FILES: 'Failed to load files',
   READ_FILE: 'Failed to read file',
   SAVE_FILE: 'Failed to save file',
-  NO_BASE_PATH: 'No folder selected'
+  NO_BASE_PATH: 'No folder selected',
+  APP_CRASH: 'Something went wrong. The application has crashed.'
 };
 
 // Toast duration (ms)

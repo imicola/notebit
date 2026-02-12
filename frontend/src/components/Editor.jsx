@@ -9,6 +9,7 @@ import { tags } from '@lezer/highlight';
 import { MatchDecorator, ViewPlugin, Decoration } from '@codemirror/view';
 import MarkdownIt from 'markdown-it';
 import markdownItGithubAlerts from 'markdown-it-github-alerts';
+import DOMPurify from 'dompurify';
 import clsx from 'clsx';
 import { Split, Eye, Edit3, Save } from 'lucide-react';
 import { VIEW_MODES } from '../constants';
@@ -271,7 +272,11 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
                 viewMode === 'edit' ? "hidden" : (viewMode === 'split' ? "w-1/2" : "w-full"),
                 isZenMode && "bg-primary"
             )}>
-                <div dangerouslySetInnerHTML={{ __html: md.render(content || '') }} />
+                <div dangerouslySetInnerHTML={{ 
+                    __html: DOMPurify.sanitize(md.render(content || ''), {
+                        ADD_ATTR: ['target', 'class'] // Allow target="_blank" and classes for styling
+                    }) 
+                }} />
             </div>
         </div>
       </div>
