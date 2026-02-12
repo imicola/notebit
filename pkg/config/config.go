@@ -168,6 +168,8 @@ func (c *Config) LoadFromFile(path string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	configPath = path
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -186,7 +188,6 @@ func (c *Config) LoadFromFile(path string) error {
 	// Merge with defaults (keep defaults for unset fields)
 	c.mergeWithDefaults(&temp)
 
-	configPath = path
 	return nil
 }
 

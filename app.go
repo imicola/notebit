@@ -54,6 +54,9 @@ func NewAppWithConfig(cfg *config.Config) *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	if err := a.loadConfig(); err != nil {
+		runtime.LogErrorf(a.ctx, "Failed to load config: %v", err)
+	}
 	a.initializeAI()
 
 	// Start file watcher if database is initialized and base path is set
@@ -62,6 +65,15 @@ func (a *App) startup(ctx context.Context) {
 			runtime.LogErrorf(a.ctx, "Failed to start watcher: %v", err)
 		}
 	}
+}
+
+func (a *App) loadConfig() error {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return err
+	}
+	configPath := filepath.Join(configDir, "notebit", "config.json")
+	return a.cfg.LoadFromFile(configPath)
 }
 
 // initializeAI initializes the AI service
@@ -416,7 +428,10 @@ func (a *App) SetChunkingConfig(strategy string, chunkSize, chunkOverlap, minChu
 	// Looking at service.go (not read yet, but assumed), it likely uses config.Get() or passed config.
 	// The app.ai service was initialized with cfg.
 
-	return a.ai.Reconfigure()
+	if err := a.ai.Reconfigure(); err != nil {
+		return err
+	}
+	return a.cfg.Save()
 }
 
 // GetAIStatus returns the current status of the AI service
@@ -439,23 +454,64 @@ func (a *App) GetAIStatus() (map[string]interface{}, error) {
 
 // SetAIProvider sets the current AI provider
 func (a *App) SetAIProvider(provider string) error {
-	return a.ai.SetProvider(provider)
+	if err := a.ai.SetProvider(provider); err != nil {
+		return err
+	}
+	return a.cfg.Save()
 }
 
 // SetAIModel sets the default embedding model
 func (a *App) SetAIModel(model string) error {
 	a.cfg.SetEmbeddingModel(model)
-	return a.ai.Reconfigure()
+	if err := a.ai.Reconfigure(); err != nil {
+		return err
+	}
+	return a.cfg.Save()
 }
 
 // SetOpenAIConfig sets the OpenAI configuration
 func (a *App) SetOpenAIConfig(apiKey, baseURL, organization string) error {
-	return a.ai.SetOpenAIConfig(apiKey, baseURL, organization)
+	if err := a.ai.SetOpenAIConfig(apiKey, baseURL, organization); err != nil {
+		return err
+	}
+	return a.cfg.Save()
 }
 
 // SetOllamaConfig sets the Ollama configuration
 func (a *App) SetOllamaConfig(baseURL, model string, timeout int) error {
-	return a.ai.SetOllamaConfig(baseURL, model, timeout)
+	if err := a.ai.SetOllamaConfig(baseURL, model, timeout); err != nil {
+		return err
+	}
+	return a.cfg.Save()
+}
+
+func (a *App) TestOpenAIConnection(apiKey, baseURL, organization, model string) (map[string]interface{}, error) {
+	provider, err := ai.NewOpenAIProvider(ai.OpenAIConfig{
+		APIKey:       apiKey,
+		BaseURL:      baseURL,
+		Organization: organization,
+		Timeout:      15 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if model == "" {
+		model = provider.GetDefaultModel()
+	}
+
+	resp, err := provider.GenerateEmbedding(&ai.EmbeddingRequest{
+		Text:  "ping",
+		Model: model,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"model":     resp.Model,
+		"dimension": len(resp.Embedding),
+	}, nil
 }
 
 // GenerateEmbedding generates an embedding for a single text

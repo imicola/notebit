@@ -7,7 +7,8 @@ import {
   SetAIProvider,
   SetOpenAIConfig,
   SetOllamaConfig,
-  SetChunkingConfig
+  SetChunkingConfig,
+  TestOpenAIConnection
 } from '../../wailsjs/go/main/App';
 import { RefreshCw, CheckCircle, AlertCircle, Save, Server, Cpu, Layers } from 'lucide-react';
 
@@ -15,6 +16,8 @@ export default function AISettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
+  const [testingOpenAI, setTestingOpenAI] = useState(false);
+  const [openaiTestResult, setOpenaiTestResult] = useState(null);
   
   // Config States
   const [provider, setProvider] = useState('ollama');
@@ -98,6 +101,24 @@ export default function AISettings() {
       console.error('Failed to save settings:', error);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTestOpenAI = async () => {
+    setTestingOpenAI(true);
+    setOpenaiTestResult(null);
+    try {
+      const result = await TestOpenAIConnection(
+        openaiConfig.api_key,
+        openaiConfig.base_url,
+        openaiConfig.organization,
+        openaiConfig.embedding_model
+      );
+      setOpenaiTestResult({ ok: true, message: `Connected (${result.model || 'ok'}, ${result.dimension || 0}d)` });
+    } catch (error) {
+      setOpenaiTestResult({ ok: false, message: error?.message || 'Connection failed' });
+    } finally {
+      setTestingOpenAI(false);
     }
   };
 
@@ -226,6 +247,29 @@ export default function AISettings() {
                   className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
                 />
               </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleTestOpenAI}
+                disabled={testingOpenAI || !openaiConfig.api_key}
+                className="flex items-center gap-2 px-3 py-2 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+              >
+                {testingOpenAI ? <RefreshCw className="animate-spin" size={14} /> : <CheckCircle size={14} />}
+                {testingOpenAI ? 'Testing...' : 'Test OpenAI API'}
+              </button>
+              {openaiTestResult ? (
+                openaiTestResult.ok ? (
+                  <div className="flex items-center gap-1.5 text-green-500 text-sm">
+                    <CheckCircle size={16} />
+                    <span>{openaiTestResult.message}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-orange-500 text-sm">
+                    <AlertCircle size={16} />
+                    <span>{openaiTestResult.message}</span>
+                  </div>
+                )
+              ) : null}
             </div>
           </div>
         )}

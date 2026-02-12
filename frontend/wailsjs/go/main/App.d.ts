@@ -64,4 +64,6 @@ export function SetOllamaConfig(arg1:string,arg2:string,arg3:number):Promise<voi
 
 export function SetOpenAIConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function TestOpenAIConnection(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Record<string, any>>;
+
 export function UpdateFilePathInIndex(arg1:string,arg2:string):Promise<void>;

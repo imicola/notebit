@@ -122,6 +122,10 @@ export function SetOpenAIConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetOpenAIConfig'](arg1, arg2, arg3);
 }
 
+export function TestOpenAIConnection(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TestOpenAIConnection'](arg1, arg2, arg3, arg4);
+}
+
 export function UpdateFilePathInIndex(arg1, arg2) {
   return window['go']['main']['App']['UpdateFilePathInIndex'](arg1, arg2);
 }
