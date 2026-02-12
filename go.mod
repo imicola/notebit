@@ -3,6 +3,7 @@ module notebit
 go 1.24.0
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/wailsapp/wails/v2 v2.11.0
 	gorm.io/gorm v1.31.1

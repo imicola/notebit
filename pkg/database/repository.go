@@ -22,6 +22,14 @@ func (m *Manager) Repository() *Repository {
 
 // ============ FILE OPERATIONS ============
 
+// ChunkInput represents input data for creating a chunk
+type ChunkInput struct {
+	Content        string
+	Heading        string
+	Embedding      []float32
+	EmbeddingModel string
+}
+
 // IndexFile indexes a file in the database
 func (r *Repository) IndexFile(path, content string, lastModified int64, fileSize int64) error {
 	// Calculate content hash
@@ -236,4 +244,73 @@ func (r *Repository) GetStats() (map[string]int64, error) {
 	stats["tags"] = tagCount
 
 	return stats, nil
+}
+
+// IndexFileWithChunks indexes a file with its chunks including embeddings
+func (r *Repository) IndexFileWithChunks(path, content string, lastModified int64, fileSize int64, chunks []ChunkInput) error {
+	// Calculate content hash
+	hash := sha256.Sum256([]byte(content))
+	contentHash := hex.EncodeToString(hash[:])
+
+	// Extract title (first # heading or filename)
+	title := extractTitle(path, content)
+
+	// Start transaction
+	tx := r.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+
+	// Ensure transaction is rolled back on error
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// Create or update file
+	file := File{
+		Path:         path,
+		Title:        title,
+		ContentHash:  contentHash,
+		LastModified: lastModified,
+		FileSize:     fileSize,
+	}
+
+	// FirstOrCreate to handle updates
+	if err := tx.Where("path = ?", path).Assign(file).FirstOrCreate(&file).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Delete existing chunks for this file
+	if err := tx.Where("file_id = ?", file.ID).Delete(&Chunk{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	// Create new chunks with embeddings
+	now := r.db.NowFunc()
+	for _, chunkInput := range chunks {
+		chunk := Chunk{
+			FileID:         file.ID,
+			Content:        chunkInput.Content,
+			Heading:        chunkInput.Heading,
+			Embedding:      chunkInput.Embedding,
+			EmbeddingModel: chunkInput.EmbeddingModel,
+		}
+
+		// Only set embedding timestamp if embedding is provided
+		if len(chunkInput.Embedding) > 0 {
+			chunk.EmbeddingCreatedAt = &now
+		}
+
+		if err := tx.Create(&chunk).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Commit transaction
+	return tx.Commit().Error
 }

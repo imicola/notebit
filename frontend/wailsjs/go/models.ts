@@ -1,3 +1,66 @@
+export namespace config {
+	
+	export class ChunkingConfig {
+	    strategy: string;
+	    chunk_size: number;
+	    chunk_overlap: number;
+	    min_chunk_size: number;
+	    max_chunk_size: number;
+	    preserve_heading: boolean;
+	    heading_separator: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChunkingConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.strategy = source["strategy"];
+	        this.chunk_size = source["chunk_size"];
+	        this.chunk_overlap = source["chunk_overlap"];
+	        this.min_chunk_size = source["min_chunk_size"];
+	        this.max_chunk_size = source["max_chunk_size"];
+	        this.preserve_heading = source["preserve_heading"];
+	        this.heading_separator = source["heading_separator"];
+	    }
+	}
+	export class OllamaConfig {
+	    base_url: string;
+	    embedding_model: string;
+	    timeout: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new OllamaConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.base_url = source["base_url"];
+	        this.embedding_model = source["embedding_model"];
+	        this.timeout = source["timeout"];
+	    }
+	}
+	export class OpenAIConfig {
+	    api_key: string;
+	    base_url: string;
+	    organization: string;
+	    embedding_model: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OpenAIConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.api_key = source["api_key"];
+	        this.base_url = source["base_url"];
+	        this.organization = source["organization"];
+	        this.embedding_model = source["embedding_model"];
+	    }
+	}
+
+}
+
 export namespace database {
 	
 	export class Chunk {

@@ -11,9 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Tech Stack
 
 - **Frontend**: React 18.2 + Vite 3.0, CodeMirror 6 (editor), Tailwind CSS
-- **Backend**: Go 1.23 + Wails v2.11 (desktop app framework that binds Go to React)
+- **Backend**: Go 1.24 + Wails v2.11 (desktop app framework that binds Go to React)
+- **Database**: SQLite with pure Go driver (no CGO) + GORM ORM
+- **AI**: OpenAI API or Ollama (local) for embeddings, custom chunking strategies
 - **Styling**: Custom Obsidian-inspired theme system with CSS variables
-- **Planned**: SQLite for metadata/vector embeddings, Ollama (local) or OpenAI for AI features
+- **File Watching**: fsnotify for automatic file indexing
 
 ## Development Commands
 
@@ -33,7 +35,9 @@ The Wails dev server runs on `http://localhost:34115` for browser-based debuggin
 
 ## Architecture
 
-### Go Backend (`pkg/files/`)
+### Go Backend
+
+#### `pkg/files/` - File System Manager
 
 The `files.Manager` struct handles all file I/O operations:
 - **SetBasePath**: Sets the working directory (persisted to localStorage)
@@ -42,6 +46,58 @@ The `files.Manager` struct handles all file I/O operations:
 - Thread-safe with `sync.RWMutex` for concurrent access
 
 All file paths are relative to `basePath`. The manager converts to absolute paths internally and uses `FileSystemError` for error wrapping.
+
+#### `pkg/ai/` - AI Service Layer
+
+The `ai.Service` manages embedding generation and text chunking:
+
+**Provider Pattern**: Abstracts embedding providers via `EmbeddingProvider` interface
+- `OpenAIProvider`: For OpenAI-compatible APIs (supports custom base URLs)
+- `OllamaProvider`: For local Ollama instances
+
+**Chunking Strategies**: Multiple `ChunkingStrategy` implementations
+- `fixed`: Fixed-size chunks with overlap
+- `heading`: Header-based chunking (preserves document structure)
+- `sliding`: Sliding window with configurable step
+- `sentence`: Sentence boundary-aware chunking
+
+**Key Methods**:
+- `ProcessDocument(text)`: Chunks text and generates embeddings for all chunks
+- `GenerateEmbeddingsBatch(texts)`: Batch embedding with configurable batch size
+- `GetStatus()`: Returns current provider, model, chunking strategy, and health
+
+#### `pkg/database/` - SQLite + Vector Storage
+
+Uses `database.Manager` with GORM ORM. Key models:
+- `File`: Path, title, content hash, last modified, file size
+- `Chunk`: Content, heading, embedding ([]float32), embedding model, timestamps
+- `Tag`: Tags for file categorization with many-to-many relationship
+
+**Repository Pattern**: `Repository` struct provides data access:
+- `IndexFileWithChunks(path, content, chunks)`: Atomic file+chunks insertion with embeddings
+- `FileNeedsIndexing(path, content)`: SHA256 hash comparison for incremental updates
+- `GetStats()`: Database statistics (file/chunk/tag counts)
+- `DeleteFile(path)`: Cascade deletes chunks
+
+Database stored at `./data/db.sqlite` relative to app directory.
+
+#### `pkg/config/` - Configuration Management
+
+Singleton pattern with `config.Get()`. JSON-based config with defaults:
+- `AIConfig`: Provider selection, OpenAI/Ollama settings, batch size
+- `ChunkingConfig`: Strategy, sizes, overlap, heading preservation
+- `WatcherConfig`: Enable/disable, debounce delay, worker count
+
+**Defaults**: Ollama preferred (local-first), heading-based chunking, 500ms debounce.
+
+#### `pkg/watcher/` - File System Watcher
+
+The `watcher.Service` provides automatic file indexing:
+- **Debouncing**: Configurable delay (default 500ms) to avoid duplicate processing
+- **Worker Pool**: Concurrent indexing with configurable worker count (default 3)
+- **Event Types**: Create, Write, Remove, Rename (via fsnotify)
+- **Ignored**: `.git`, `node_modules`, `.idea`, temp files (`*.swp`, `*~`, `*.tmp`)
+- **Full Index**: `IndexAll(ctx)` for background re-indexing with progress tracking
 
 ### React Frontend Structure
 
@@ -84,22 +140,23 @@ Generated bindings are in `frontend/wailsjs/` - do not edit these directly.
 
 ### Key Constraints
 
-- **Local-First**: Notes stored as plain `.md` files; embeddings planned for `./data/db.sqlite`
+- **Local-First**: Notes stored as plain `.md` files; embeddings in `./data/db.sqlite`
 - **Performance**: Cold start < 2s, vector search < 200ms, non-blocking UI (use goroutines)
 - **Privacy**: No external calls by default; Ollama preferred over cloud APIs
 - **Data Integrity**: App must function 100% even if AI services crash
 - **NO AI autocomplete**: The editor should never show ghost text/inline suggestions during typing
+- **Thread Safety**: All Go services use appropriate mutex types (`sync.RWMutex`, `sync.Mutex`)
 
 ## Module Status
 
-- **Module A - The Sanctuary**: Distraction-free Markdown editor (mostly complete)
-- **Module B - The Silent Curator**: Background embedding and semantic search (not implemented)
+- **Module A - The Sanctuary**: Distraction-free Markdown editor (complete)
+- **Module B - The Silent Curator**: Background embedding and semantic search (infrastructure complete, UI pending)
 - **Module C - Knowledge Review**: RAG-based chat interface (not implemented)
 - **Module D - Knowledge Graph**: Graph visualization (not implemented)
 
 ## Current Implementation Status
 
-Completed features:
+**Completed Features:**
 - File tree with nested folders and markdown file filtering
 - Markdown editor with syntax highlighting (CodeMirror 6)
 - Split view with synchronized scroll
@@ -109,3 +166,10 @@ Completed features:
 - Folder persistence (last opened folder restored on startup)
 - Custom fonts (interface + text)
 - Toast notifications for save confirmation
+
+**Infrastructure Complete (UI Integration Pending):**
+- AI service with OpenAI/Ollama provider abstraction
+- SQLite database with vector embeddings storage
+- File watcher with debouncing and concurrent indexing
+- Configuration system with persistent settings
+- Multiple chunking strategies (fixed, heading, sliding, sentence)

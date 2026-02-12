@@ -9,6 +9,8 @@ import (
 	"sync"
 )
 
+const maxReadFileSize = 10 * 1024 * 1024
+
 // Manager handles file system operations for notes
 type Manager struct {
 	basePath string
@@ -153,6 +155,15 @@ func (m *Manager) ReadFile(relativePath string) (*NoteContent, error) {
 	}
 
 	fullPath := filepath.Join(basePath, relativePath)
+
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return nil, &FileSystemError{Op: "stat", Path: fullPath, Err: err}
+	}
+
+	if info.Size() > maxReadFileSize {
+		return nil, &FileSystemError{Op: "read", Path: fullPath, Err: fmt.Errorf("file too large: %d bytes", info.Size())}
+	}
 
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
