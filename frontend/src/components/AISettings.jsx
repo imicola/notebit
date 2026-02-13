@@ -20,6 +20,14 @@ export default function AISettings() {
     chunkingConfig, setChunkingConfig,
     llmConfig, setLLMConfig,
     llmOpenAIConfig, setLLMOpenAIConfig,
+    embeddingProfiles,
+    llmProfiles,
+    saveEmbeddingProfile,
+    applyEmbeddingProfile,
+    deleteEmbeddingProfile,
+    saveLLMProfile,
+    applyLLMProfile,
+    deleteLLMProfile,
     ragConfig, setRAGConfig,
     graphConfig, setGraphConfig,
     handleSave,
@@ -68,6 +76,10 @@ export default function AISettings() {
           chunkingConfig={chunkingConfig} setChunkingConfig={setChunkingConfig}
           testingOpenAI={testingOpenAI} openaiTestResult={openaiTestResult}
           handleTestOpenAI={handleTestOpenAI}
+          embeddingProfiles={embeddingProfiles}
+          saveEmbeddingProfile={saveEmbeddingProfile}
+          applyEmbeddingProfile={applyEmbeddingProfile}
+          deleteEmbeddingProfile={deleteEmbeddingProfile}
           similarityStatus={similarityStatus}
           vectorEngine={vectorEngine}
           setVectorEngine={setVectorEngine}
@@ -82,6 +94,10 @@ export default function AISettings() {
         <LLMTab
           llmConfig={llmConfig} setLLMConfig={setLLMConfig}
           llmOpenAIConfig={llmOpenAIConfig} setLLMOpenAIConfig={setLLMOpenAIConfig}
+          llmProfiles={llmProfiles}
+          saveLLMProfile={saveLLMProfile}
+          applyLLMProfile={applyLLMProfile}
+          deleteLLMProfile={deleteLLMProfile}
         />
       )}
 

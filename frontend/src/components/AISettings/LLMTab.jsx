@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { MessageSquare } from 'lucide-react';
 
 /**
@@ -5,8 +6,42 @@ import { MessageSquare } from 'lucide-react';
  */
 export default function LLMTab({
   llmConfig, setLLMConfig,
-  llmOpenAIConfig, setLLMOpenAIConfig
+  llmOpenAIConfig, setLLMOpenAIConfig,
+  llmProfiles,
+  saveLLMProfile,
+  applyLLMProfile,
+  deleteLLMProfile
 }) {
+  const [profileName, setProfileName] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState('');
+
+  const handleSelectProfile = (profileId) => {
+    setSelectedProfileId(profileId);
+    if (!profileId) {
+      setProfileName('');
+      return;
+    }
+    const profile = (llmProfiles || []).find((item) => item.id === profileId);
+    if (profile) {
+      setProfileName(profile.name);
+      applyLLMProfile(profileId);
+    }
+  };
+
+  const handleSaveProfile = () => {
+    const savedId = saveLLMProfile(profileName);
+    if (savedId) {
+      setSelectedProfileId(savedId);
+    }
+  };
+
+  const handleDeleteProfile = () => {
+    if (!selectedProfileId) return;
+    deleteLLMProfile(selectedProfileId);
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
   return (
     <div className="space-y-6">
       <section>
@@ -16,6 +51,48 @@ export default function LLMTab({
         </div>
 
         <div className="space-y-4 bg-primary-alt/30 p-4 rounded-lg border border-modifier-border">
+          <div>
+            <label className="block text-sm font-medium text-normal mb-1">Chat Profiles</label>
+            <select
+              value={selectedProfileId}
+              onChange={(e) => handleSelectProfile(e.target.value)}
+              className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+            >
+              <option value="">Select a profile</option>
+              {(llmProfiles || []).map((profile) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-normal mb-1">Profile Name</label>
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+                placeholder="Default chat, Coding, Research"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleSaveProfile}
+                disabled={!profileName.trim()}
+                className="w-full h-10 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleDeleteProfile}
+                disabled={!selectedProfileId}
+                className="w-full h-10 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-normal mb-1">Provider</label>
             <select

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Server, Cpu, Layers, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
 
 /**
@@ -9,6 +10,10 @@ export default function EmbeddingTab({
   openaiConfig, setOpenaiConfig,
   chunkingConfig, setChunkingConfig,
   testingOpenAI, openaiTestResult, handleTestOpenAI,
+  embeddingProfiles,
+  saveEmbeddingProfile,
+  applyEmbeddingProfile,
+  deleteEmbeddingProfile,
   similarityStatus,
   vectorEngine,
   setVectorEngine,
@@ -17,6 +22,36 @@ export default function EmbeddingTab({
   reindexResult,
   handleReindexEmbeddings
 }) {
+  const [profileName, setProfileName] = useState('');
+  const [selectedProfileId, setSelectedProfileId] = useState('');
+
+  const handleSelectProfile = (profileId) => {
+    setSelectedProfileId(profileId);
+    if (!profileId) {
+      setProfileName('');
+      return;
+    }
+    const profile = (embeddingProfiles || []).find((item) => item.id === profileId);
+    if (profile) {
+      setProfileName(profile.name);
+      applyEmbeddingProfile(profileId);
+    }
+  };
+
+  const handleSaveProfile = () => {
+    const savedId = saveEmbeddingProfile(profileName);
+    if (savedId) {
+      setSelectedProfileId(savedId);
+    }
+  };
+
+  const handleDeleteProfile = () => {
+    if (!selectedProfileId) return;
+    deleteEmbeddingProfile(selectedProfileId);
+    setSelectedProfileId('');
+    setProfileName('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Embedding Index Maintenance */}
@@ -104,6 +139,56 @@ export default function EmbeddingTab({
             <div className="font-medium text-normal mb-1">OpenAI</div>
             <div className="text-xs text-muted">Cloud-based models. Requires API key.</div>
           </button>
+        </div>
+      </section>
+
+      <section>
+        <div className="flex items-center gap-2 mb-4">
+          <Layers className="text-obsidian-purple" size={20} />
+          <h3 className="text-lg font-medium text-normal">Embedding Profiles</h3>
+        </div>
+        <div className="space-y-4 bg-primary-alt/30 p-4 rounded-lg border border-modifier-border">
+          <div>
+            <label className="block text-sm font-medium text-normal mb-1">Saved Configurations</label>
+            <select
+              value={selectedProfileId}
+              onChange={(e) => handleSelectProfile(e.target.value)}
+              className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+            >
+              <option value="">Select a profile</option>
+              {(embeddingProfiles || []).map((profile) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-normal mb-1">Profile Name</label>
+              <input
+                type="text"
+                value={profileName}
+                onChange={(e) => setProfileName(e.target.value)}
+                className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+                placeholder="Work OpenAI, Local Ollama, etc."
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleSaveProfile}
+                disabled={!profileName.trim()}
+                className="w-full h-10 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={handleDeleteProfile}
+                disabled={!selectedProfileId}
+                className="w-full h-10 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

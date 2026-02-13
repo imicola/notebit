@@ -5,7 +5,9 @@
 // Storage keys
 export const STORAGE_KEYS = {
   SETTINGS: 'notebit-settings',
-  SIDEBAR_WIDTH: 'notebit-sidebar-width'
+  SIDEBAR_WIDTH: 'notebit-sidebar-width',
+  EMBEDDING_PROFILES: 'notebit-embedding-profiles',
+  LLM_PROFILES: 'notebit-llm-profiles'
 };
 
 // Sidebar dimensions

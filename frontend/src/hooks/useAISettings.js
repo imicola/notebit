@@ -4,6 +4,22 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { aiService } from '../services/aiService';
+import { STORAGE_KEYS } from '../constants';
+
+const readProfiles = (key) => {
+  try {
+    const stored = localStorage.getItem(key);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    return [];
+  }
+};
+
+const persistProfiles = (key, profiles) => {
+  localStorage.setItem(key, JSON.stringify(profiles));
+};
 
 export const useAISettings = () => {
   const [loading, setLoading] = useState(true);
@@ -53,6 +69,8 @@ export const useAISettings = () => {
   };
   const [ragConfig, setRAGConfig] = useState(defaultRAG);
   const [graphConfig, setGraphConfig] = useState(defaultGraph);
+  const [embeddingProfiles, setEmbeddingProfiles] = useState([]);
+  const [llmProfiles, setLlmProfiles] = useState([]);
 
   // Load all settings on mount
   const toInt = (value, fallback) => {
@@ -128,6 +146,94 @@ export const useAISettings = () => {
   }, []);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
+  useEffect(() => {
+    setEmbeddingProfiles(readProfiles(STORAGE_KEYS.EMBEDDING_PROFILES));
+    setLlmProfiles(readProfiles(STORAGE_KEYS.LLM_PROFILES));
+  }, []);
+
+  const saveEmbeddingProfile = useCallback((name) => {
+    const trimmed = name?.trim();
+    if (!trimmed) return null;
+    let nextId = null;
+    setEmbeddingProfiles((prev) => {
+      const existing = prev.find((profile) => profile.name === trimmed);
+      nextId = existing?.id || `${Date.now()}`;
+      const profile = {
+        id: nextId,
+        name: trimmed,
+        provider,
+        openai: { ...openaiConfig },
+        ollama: { ...ollamaConfig }
+      };
+      const next = existing
+        ? prev.map((item) => (item.name === trimmed ? profile : item))
+        : [...prev, profile];
+      persistProfiles(STORAGE_KEYS.EMBEDDING_PROFILES, next);
+      return next;
+    });
+    return nextId;
+  }, [provider, openaiConfig, ollamaConfig]);
+
+  const applyEmbeddingProfile = useCallback((profileId) => {
+    const profile = embeddingProfiles.find((item) => item.id === profileId);
+    if (!profile) return;
+    setProvider(profile.provider || 'ollama');
+    if (profile.openai) {
+      setOpenaiConfig((prev) => ({ ...prev, ...profile.openai }));
+    }
+    if (profile.ollama) {
+      setOllamaConfig((prev) => ({ ...prev, ...profile.ollama }));
+    }
+  }, [embeddingProfiles, setProvider, setOpenaiConfig, setOllamaConfig]);
+
+  const deleteEmbeddingProfile = useCallback((profileId) => {
+    setEmbeddingProfiles((prev) => {
+      const next = prev.filter((item) => item.id !== profileId);
+      persistProfiles(STORAGE_KEYS.EMBEDDING_PROFILES, next);
+      return next;
+    });
+  }, []);
+
+  const saveLLMProfile = useCallback((name) => {
+    const trimmed = name?.trim();
+    if (!trimmed) return null;
+    let nextId = null;
+    setLlmProfiles((prev) => {
+      const existing = prev.find((profile) => profile.name === trimmed);
+      nextId = existing?.id || `${Date.now()}`;
+      const profile = {
+        id: nextId,
+        name: trimmed,
+        config: { ...llmConfig },
+        openai: { ...llmOpenAIConfig }
+      };
+      const next = existing
+        ? prev.map((item) => (item.name === trimmed ? profile : item))
+        : [...prev, profile];
+      persistProfiles(STORAGE_KEYS.LLM_PROFILES, next);
+      return next;
+    });
+    return nextId;
+  }, [llmConfig, llmOpenAIConfig]);
+
+  const applyLLMProfile = useCallback((profileId) => {
+    const profile = llmProfiles.find((item) => item.id === profileId);
+    if (!profile) return;
+    if (profile.config) {
+      setLLMConfig((prev) => ({ ...prev, ...profile.config }));
+    }
+    if (profile.openai) {
+      setLLMOpenAIConfig((prev) => ({ ...prev, ...profile.openai }));
+    }
+  }, [llmProfiles, setLLMConfig, setLLMOpenAIConfig]);
+
+  const deleteLLMProfile = useCallback((profileId) => {
+    setLlmProfiles((prev) => {
+      const next = prev.filter((item) => item.id !== profileId);
+      persistProfiles(STORAGE_KEYS.LLM_PROFILES, next);
+      return next;
+    });
+  }, []);
 
   // Save all settings
   const handleSave = useCallback(async () => {
@@ -257,6 +363,14 @@ export const useAISettings = () => {
     // Graph
     graphConfig, setGraphConfig,
     // Actions
+    embeddingProfiles,
+    llmProfiles,
+    saveEmbeddingProfile,
+    applyEmbeddingProfile,
+    deleteEmbeddingProfile,
+    saveLLMProfile,
+    applyLLMProfile,
+    deleteLLMProfile,
     handleSave,
   };
 };
