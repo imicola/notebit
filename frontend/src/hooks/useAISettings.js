@@ -134,7 +134,7 @@ export const useAISettings = () => {
     setSaving(true);
     try {
       if (provider === 'openai') {
-        await aiService.setOpenAIConfig(openaiConfig.api_key, openaiConfig.base_url, openaiConfig.organization);
+        await aiService.setOpenAIConfig(openaiConfig.api_key, openaiConfig.base_url, openaiConfig.organization, openaiConfig.embedding_model);
       } else {
         await aiService.setOllamaConfig(
           ollamaConfig.base_url,

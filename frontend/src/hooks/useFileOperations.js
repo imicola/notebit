@@ -120,6 +120,7 @@ export const useFileOperations = (options = {}) => {
     setFileTree,
     setCurrentFile,
     setCurrentContent,
+    setBasePath,
     setError
   };
 };

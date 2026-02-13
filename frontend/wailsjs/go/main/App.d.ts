@@ -86,7 +86,7 @@ export function SetLLMConfig(arg1:string,arg2:string,arg3:number,arg4:number,arg
 
 export function SetOllamaConfig(arg1:string,arg2:string,arg3:number):Promise<void>;
 
-export function SetOpenAIConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function SetOpenAIConfig(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SetRAGConfig(arg1:number,arg2:number,arg3:string):Promise<void>;
 

@@ -41,18 +41,21 @@ func NewService(cfg *config.Config) *Service {
 func (s *Service) Initialize() error {
 	timer := logger.StartTimer()
 	logger.Info("Initializing AI service")
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	s.currentProvider = s.cfg.GetProvider()
 
 	// Initialize OpenAI provider if configured
 	if s.cfg.IsOpenAIConfigured() {
 		openaiCfg := s.cfg.GetOpenAIConfig()
 		provider, err := NewOpenAIProvider(OpenAIConfig{
-			APIKey:       openaiCfg.APIKey,
-			BaseURL:      openaiCfg.BaseURL,
-			Organization: openaiCfg.Organization,
-			Timeout:      30 * time.Second,
+			APIKey:         openaiCfg.APIKey,
+			BaseURL:        openaiCfg.BaseURL,
+			Organization:   openaiCfg.Organization,
+			Timeout:        30 * time.Second,
+			EmbeddingModel: openaiCfg.EmbeddingModel,
 		})
 		if err == nil {
 			s.providers["openai"] = provider
@@ -347,8 +350,8 @@ func (s *Service) Reconfigure() error {
 }
 
 // SetOpenAIConfig updates the OpenAI configuration
-func (s *Service) SetOpenAIConfig(apiKey, baseURL, organization string) error {
-	s.cfg.SetOpenAIConfig(apiKey, baseURL, organization)
+func (s *Service) SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel string) error {
+	s.cfg.SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel)
 
 	// Reinitialize to apply changes
 	return s.Initialize()

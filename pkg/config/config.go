@@ -426,7 +426,7 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 }
 
 // SetOpenAIConfig sets the OpenAI configuration
-func (c *Config) SetOpenAIConfig(apiKey, baseURL, organization string) {
+func (c *Config) SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -436,6 +436,9 @@ func (c *Config) SetOpenAIConfig(apiKey, baseURL, organization string) {
 	}
 	if organization != "" {
 		c.AI.OpenAI.Organization = organization
+	}
+	if embeddingModel != "" {
+		c.AI.OpenAI.EmbeddingModel = embeddingModel
 	}
 }
 

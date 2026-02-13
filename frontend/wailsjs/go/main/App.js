@@ -162,8 +162,8 @@ export function SetOllamaConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetOllamaConfig'](arg1, arg2, arg3);
 }
 
-export function SetOpenAIConfig(arg1, arg2, arg3) {
-  return window['go']['main']['App']['SetOpenAIConfig'](arg1, arg2, arg3);
+export function SetOpenAIConfig(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetOpenAIConfig'](arg1, arg2, arg3, arg4);
 }
 
 export function SetRAGConfig(arg1, arg2, arg3) {

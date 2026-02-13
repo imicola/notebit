@@ -22,7 +22,7 @@ function App() {
     fileTree, currentFile, currentContent, basePath,
     loading, error,
     openFolder: baseOpenFolder, selectFile, saveFile: baseSaveFile,
-    updateContent, refreshFileTree, setFileTree, setError
+    updateContent, refreshFileTree, setFileTree, setBasePath, setError
   } = useFileOperations({ onSuccess: (msg) => showToast(msg) });
 
   const {
@@ -68,6 +68,7 @@ function App() {
         try {
           await fileService.setFolder(lastFolder);
           await refreshFileTree();
+          setBasePath(lastFolder);
         } catch (e) {
           console.error('Failed to restore folder', e);
         }
@@ -343,6 +344,7 @@ function App() {
           <SimilarNotesSidebar
             query={currentContent}
             searchRequest={searchRequest}
+            basePath={basePath}
             isOpen={isRightSidebarOpen && !isZenMode}
             onClose={() => setIsRightSidebarOpen(false)}
             onNoteClick={(note) => selectFile({ path: note.path, name: note.title })}

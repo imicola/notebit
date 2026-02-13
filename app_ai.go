@@ -94,8 +94,8 @@ func (a *App) SetAIModel(model string) error {
 }
 
 // SetOpenAIConfig sets the OpenAI configuration
-func (a *App) SetOpenAIConfig(apiKey, baseURL, organization string) error {
-	if err := a.ai.SetOpenAIConfig(apiKey, baseURL, organization); err != nil {
+func (a *App) SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel string) error {
+	if err := a.ai.SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel); err != nil {
 		return err
 	}
 	return a.cfg.Save()

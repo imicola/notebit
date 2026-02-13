@@ -78,8 +78,8 @@ export const aiService = {
     return wrapCall('getOpenAIConfig', GetOpenAIConfig);
   },
 
-  async setOpenAIConfig(apiKey, baseURL, organization) {
-    return wrapCall('setOpenAIConfig', () => SetOpenAIConfig(apiKey, baseURL, organization));
+  async setOpenAIConfig(apiKey, baseURL, organization, embeddingModel) {
+    return wrapCall('setOpenAIConfig', () => SetOpenAIConfig(apiKey, baseURL, organization, embeddingModel));
   },
 
   async testOpenAIConnection(apiKey, baseURL, organization, model) {

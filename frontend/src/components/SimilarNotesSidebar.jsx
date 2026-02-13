@@ -7,6 +7,7 @@ import { SEMANTIC_SEARCH } from '../constants';
 const SimilarNotesSidebar = ({
   query,          // Content to search for similar notes
   searchRequest,  // Snapshot generated on save to trigger search
+  basePath,
   isOpen,
   onClose,
   onNoteClick,
@@ -41,6 +42,12 @@ const SimilarNotesSidebar = ({
       setStatus({ available: false, db_initialized: false });
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      checkStatus();
+    }
+  }, [isOpen, basePath]);
 
   // Search only when a new save request arrives
   useEffect(() => {
