@@ -78,12 +78,12 @@ func (a *App) startup(ctx context.Context) {
 	timer := logger.StartTimer()
 	a.ctx = ctx
 	logger.Info("App startup initiated")
-	
+
 	if err := a.loadConfig(); err != nil {
 		logger.ErrorWithFields(ctx, map[string]interface{}{"error": err.Error()}, "Failed to load config")
 		runtime.LogErrorf(a.ctx, "Failed to load config: %v", err)
 	}
-	
+
 	a.initializeAI()
 	a.initializeLLM()
 
@@ -98,7 +98,7 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize RAG and Graph services after database is ready
 	a.initializeRAG()
 	a.initializeGraph()
-	
+
 	logger.InfoWithDuration(ctx, timer(), "App startup completed")
 }
 
@@ -115,7 +115,7 @@ func (a *App) loadConfig() error {
 func (a *App) initializeAI() {
 	timer := logger.StartTimer()
 	logger.Debug("Initializing AI service")
-	
+
 	if err := a.ai.Initialize(); err != nil {
 		logger.WarnWithFields(a.ctx, map[string]interface{}{"error": err.Error()}, "AI service initialization failed")
 		runtime.LogWarningf(a.ctx, "AI service initialization failed: %v", err)
@@ -254,4 +254,3 @@ func (a *App) shutdown(context.Context) {
 		a.indexQueue = nil
 	}
 }
-

@@ -41,7 +41,7 @@ func GetInstance() *Manager {
 func (m *Manager) Init(basePath string) error {
 	timer := logger.StartTimer()
 	logger.InfoWithFields(context.TODO(), map[string]interface{}{"base_path": basePath}, "Initializing database")
-	
+
 	var err error
 	m.initOnce.Do(func() {
 		m.mu.Lock()
@@ -84,7 +84,7 @@ func (m *Manager) Init(basePath string) error {
 			m.initErr = &DatabaseError{Op: "migrate", Err: err}
 			return
 		}
-		
+
 		logger.InfoWithDuration(context.TODO(), timer(), "Database initialized successfully: %s", dbPath)
 	})
 

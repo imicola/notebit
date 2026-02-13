@@ -1,16 +1,17 @@
 # Architecture Layer Analysis Report
-**Last Updated**: 2026-02-13
+**Last Updated**: 2026-02-18
+**Status**: RESOLVED ✅
 
-## Layering Violations
+## Layering Violations — ALL RESOLVED
 
-| Violation Location | Wrong Dependency / Pattern | Severity | Fix Suggestion |
-|--------------------|----------------------------|----------|----------------|
-| `frontend/src/App.jsx` | UI root directly imports Wails APIs (`OpenFolder`, `ListFiles`, `ReadFile`, `SaveFile`, `SetFolder`) | High | Route through `services/fileService.js` + hooks |
-| `frontend/src/components/ChatPanel.jsx` | Component directly calls Wails `RAGQuery` | High | Introduce `services/aiService.js` and keep component presentation-focused |
-| `frontend/src/components/GraphPanel.jsx` | Component directly calls Wails `GetGraphData` | High | Introduce graph service adapter |
-| `frontend/src/components/SimilarNotesSidebar.jsx` | Component directly calls `FindSimilar` / `GetSimilarityStatus` | High | Move backend invocation to service layer |
-| `frontend/src/components/AISettings.jsx` | Component directly owns persistence/API details | Medium | Split into settings service + view model hook |
-| `pkg/database/manager.go` | Logger APIs receive `nil` context | High | Use `context.TODO()` or propagated context |
+| Violation Location | Problem | Severity | Fix Applied | Status |
+|--------------------|---------|----------|-------------|--------|
+| `frontend/src/App.jsx` | UI root directly imported Wails APIs | High | Integrated 5 hooks (useFileOperations, useSettings, useToast, useResizable, useKeyboardShortcuts) | ✅ Fixed |
+| `frontend/src/components/ChatPanel.jsx` | Direct Wails RAGQuery call | High | Routes through `services/ragService.js` | ✅ Fixed |
+| `frontend/src/components/GraphPanel.jsx` | Direct GetGraphData call | High | Routes through `services/graphService.js` | ✅ Fixed |
+| `frontend/src/components/SimilarNotesSidebar.jsx` | Direct FindSimilar/GetSimilarityStatus calls | High | Routes through `services/similarityService.js` | ✅ Fixed |
+| `frontend/src/components/AISettings.jsx` | Monolithic 675-line component | High | Decomposed into useAISettings hook + 4 Tab sub-components | ✅ Fixed |
+| `pkg/database/manager.go` | Logger APIs receive nil context | High | All nil context args → context.TODO() | ✅ Fixed |
 
 ## Circular Dependencies
 - No explicit circular dependency detected from current scan.
