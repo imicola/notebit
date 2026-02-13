@@ -9,6 +9,7 @@ import (
 	"notebit/pkg/files"
 	"notebit/pkg/graph"
 	"notebit/pkg/knowledge"
+	"notebit/pkg/logger"
 	"notebit/pkg/rag"
 	"notebit/pkg/watcher"
 	"os"
@@ -75,7 +76,9 @@ func NewAppWithConfig(cfg *config.Config) *App {
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	logger.Info("App startup initiated")
 	if err := a.loadConfig(); err != nil {
+		logger.Error("Failed to load config: %v", err)
 		runtime.LogErrorf(a.ctx, "Failed to load config: %v", err)
 	}
 	a.initializeAI()
@@ -84,6 +87,7 @@ func (a *App) startup(ctx context.Context) {
 	// Start file watcher if database is initialized and base path is set
 	if a.dbm.IsInitialized() && a.fm.GetBasePath() != "" {
 		if err := a.startWatcher(); err != nil {
+			logger.Error("Failed to start watcher: %v", err)
 			runtime.LogErrorf(a.ctx, "Failed to start watcher: %v", err)
 		}
 	}
@@ -119,15 +123,15 @@ func (a *App) initializeLLM() {
 	if llmConfig.Provider == "openai" {
 		// Start with dedicated LLM OpenAI config
 		openAIConfig := llmConfig.OpenAI
-		
+
 		// Fallback to global AI config if API Key is missing
 		// This maintains backward compatibility and ease of use
 		globalOpenAI := a.cfg.GetOpenAIConfig()
-		
+
 		if openAIConfig.APIKey == "" {
 			openAIConfig.APIKey = globalOpenAI.APIKey
 		}
-		
+
 		// Use global BaseURL if local is empty, or default
 		if openAIConfig.BaseURL == "" {
 			if globalOpenAI.BaseURL != "" {
@@ -136,7 +140,7 @@ func (a *App) initializeLLM() {
 				openAIConfig.BaseURL = "https://api.openai.com/v1"
 			}
 		}
-		
+
 		if openAIConfig.Organization == "" {
 			openAIConfig.Organization = globalOpenAI.Organization
 		}
