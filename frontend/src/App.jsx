@@ -345,6 +345,7 @@ function App() {
             query={currentContent}
             searchRequest={searchRequest}
             basePath={basePath}
+            currentPath={currentFile?.path}
             isOpen={isRightSidebarOpen && !isZenMode}
             onClose={() => setIsRightSidebarOpen(false)}
             onNoteClick={(note) => selectFile({ path: note.path, name: note.title })}

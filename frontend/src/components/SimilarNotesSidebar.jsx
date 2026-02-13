@@ -8,6 +8,7 @@ const SimilarNotesSidebar = ({
   query,          // Content to search for similar notes
   searchRequest,  // Snapshot generated on save to trigger search
   basePath,
+  currentPath,
   isOpen,
   onClose,
   onNoteClick,
@@ -71,7 +72,10 @@ const SimilarNotesSidebar = ({
           if (!mountedRef.current || requestIdRef.current !== currentRequestId) {
             return;
           }
-          const filtered = results.filter((note) => note.similarity >= SEMANTIC_SEARCH.MIN_SIMILARITY);
+          const filtered = results.filter((note) => (
+            note.similarity >= SEMANTIC_SEARCH.MIN_SIMILARITY
+            && (!currentPath || note.path !== currentPath)
+          ));
           setNotes(filtered);
         })
         .catch((err) => {
