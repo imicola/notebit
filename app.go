@@ -7,7 +7,9 @@ import (
 	"notebit/pkg/config"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
+	"notebit/pkg/graph"
 	"notebit/pkg/knowledge"
+	"notebit/pkg/rag"
 	"notebit/pkg/watcher"
 	"os"
 	"path/filepath"
@@ -24,7 +26,16 @@ type App struct {
 	ai      *ai.Service
 	ks      *knowledge.Service
 	cfg     *config.Config
-	watcher *watcher.Service
+	watcher  *watcher.Service
+	rag      *rag.Service
+	graph    *graph.Service
+	llm      ai.LLMProvider
+	indexQueue chan indexJob
+}
+
+type indexJob struct {
+	path    string
+	content string
 }
 
 type watcherLogger struct {
@@ -48,13 +59,16 @@ func NewAppWithConfig(cfg *config.Config) *App {
 	dbm := database.GetInstance()
 	aiService := ai.NewService(cfg)
 
-	return &App{
-		fm:  fm,
-		dbm: dbm,
-		cfg: cfg,
-		ai:  aiService,
-		ks:  knowledge.NewService(fm, dbm, aiService),
+	app := &App{
+		fm:         fm,
+		dbm:        dbm,
+		cfg:        cfg,
+		ai:         aiService,
+		ks:         knowledge.NewService(fm, dbm, aiService),
+		indexQueue: make(chan indexJob, 128),
 	}
+	app.startIndexWorkers(4)
+	return app
 }
 
 // startup is called when the app starts. The context is saved
@@ -65,6 +79,7 @@ func (a *App) startup(ctx context.Context) {
 		runtime.LogErrorf(a.ctx, "Failed to load config: %v", err)
 	}
 	a.initializeAI()
+	a.initializeLLM()
 
 	// Start file watcher if database is initialized and base path is set
 	if a.dbm.IsInitialized() && a.fm.GetBasePath() != "" {
@@ -72,6 +87,10 @@ func (a *App) startup(ctx context.Context) {
 			runtime.LogErrorf(a.ctx, "Failed to start watcher: %v", err)
 		}
 	}
+
+	// Initialize RAG and Graph services after database is ready
+	a.initializeRAG()
+	a.initializeGraph()
 }
 
 func (a *App) loadConfig() error {
@@ -87,6 +106,38 @@ func (a *App) loadConfig() error {
 func (a *App) initializeAI() {
 	if err := a.ai.Initialize(); err != nil {
 		runtime.LogWarningf(a.ctx, "AI service initialization failed: %v", err)
+	}
+}
+
+// initializeLLM initializes the LLM provider for chat completion
+func (a *App) initializeLLM() {
+	llmConfig := a.cfg.GetLLMConfig()
+	if llmConfig.Provider == "" {
+		return // No LLM provider configured
+	}
+
+	if llmConfig.Provider == "openai" {
+		openAIConfig := a.cfg.GetOpenAIConfig()
+		llm, err := ai.NewOpenAILLMProvider(openAIConfig)
+		if err == nil {
+			a.llm = llm
+		} else {
+			runtime.LogWarningf(a.ctx, "Failed to initialize OpenAI LLM: %v", err)
+		}
+	}
+}
+
+// initializeRAG initializes the RAG service
+func (a *App) initializeRAG() {
+	if a.llm != nil && a.dbm.IsInitialized() {
+		a.rag = rag.NewService(a.dbm, a.ai, a.llm, a.cfg)
+	}
+}
+
+// initializeGraph initializes the Graph service
+func (a *App) initializeGraph() {
+	if a.dbm.IsInitialized() {
+		a.graph = graph.NewService(a.dbm, a.cfg)
 	}
 }
 
@@ -160,6 +211,10 @@ func (a *App) runFullIndex() {
 // shutdown is called when the app is shutting down
 func (a *App) shutdown(context.Context) {
 	a.stopWatcher()
+	if a.indexQueue != nil {
+		close(a.indexQueue)
+		a.indexQueue = nil
+	}
 }
 
 // OpenFolder opens a directory dialog and sets the base path
@@ -238,7 +293,7 @@ func (a *App) SaveFile(path, content string) error {
 
 	// Index the file in database after saving (pass content to avoid re-reading)
 	if a.dbm.IsInitialized() {
-		go a.indexFileContent(path, content)
+		a.enqueueIndexFileContent(path, content)
 	}
 
 	return nil
@@ -253,7 +308,7 @@ func (a *App) CreateFile(path, content string) error {
 
 	// Index the file in database after creating (pass content to avoid re-reading)
 	if a.dbm.IsInitialized() {
-		go a.indexFileContent(path, content)
+		a.enqueueIndexFileContent(path, content)
 	}
 
 	return nil
@@ -340,6 +395,29 @@ func (a *App) indexFileContent(path, content string) error {
 	}
 
 	return nil
+}
+
+func (a *App) startIndexWorkers(count int) {
+	if count <= 0 {
+		count = 1
+	}
+	for i := 0; i < count; i++ {
+		go a.indexWorker()
+	}
+}
+
+func (a *App) indexWorker() {
+	for job := range a.indexQueue {
+		_ = a.indexFileContent(job.path, job.content)
+	}
+}
+
+func (a *App) enqueueIndexFileContent(path, content string) {
+	if a.indexQueue == nil {
+		go a.indexFileContent(path, content)
+		return
+	}
+	a.indexQueue <- indexJob{path: path, content: content}
 }
 
 // GetIndexedFile retrieves metadata from database
@@ -438,6 +516,22 @@ func (a *App) SetChunkingConfig(strategy string, chunkSize, chunkOverlap, minChu
 	if err := a.ai.Reconfigure(); err != nil {
 		return err
 	}
+	return a.cfg.Save()
+}
+
+// GetRAGConfig returns the RAG configuration
+func (a *App) GetRAGConfig() (config.RAGConfig, error) {
+	return a.cfg.GetRAGConfig(), nil
+}
+
+// SetRAGConfig sets the RAG configuration
+func (a *App) SetRAGConfig(maxContextChunks int, temperature float32, systemPrompt string) error {
+	cfg := config.RAGConfig{
+		MaxContextChunks: maxContextChunks,
+		Temperature:      temperature,
+		SystemPrompt:     systemPrompt,
+	}
+	a.cfg.SetRAGConfig(cfg)
 	return a.cfg.Save()
 }
 
@@ -631,4 +725,102 @@ func (a *App) FindSimilar(content string, limit int) ([]SimilarNote, error) {
 // GetSimilarityStatus returns the availability status of semantic search
 func (a *App) GetSimilarityStatus() (map[string]interface{}, error) {
 	return a.ks.GetSimilarityStatus()
+}
+
+// ============ RAG CHAT API METHODS ============
+
+// RAGQuery performs a RAG query
+func (a *App) RAGQuery(query string) (map[string]interface{}, error) {
+	if a.rag == nil {
+		return nil, fmt.Errorf("RAG service not initialized")
+	}
+
+	response, err := a.rag.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"message_id": response.MessageID,
+		"content":    response.Content,
+		"sources":    response.Sources,
+		"tokens_used": response.TokensUsed,
+	}, nil
+}
+
+// GetRAGStatus returns the status of the RAG service
+func (a *App) GetRAGStatus() (map[string]interface{}, error) {
+	if a.rag == nil {
+		return map[string]interface{}{
+			"available":      false,
+			"llm_provider":  "",
+			"llm_model":     "",
+			"database_ready": a.dbm.IsInitialized(),
+		}, nil
+	}
+
+	status := a.rag.GetStatus()
+
+	return map[string]interface{}{
+		"available":      status.Available,
+		"llm_provider":   status.LLMProvider,
+		"llm_model":     status.LLMModel,
+		"database_ready": status.DatabaseReady,
+	}, nil
+}
+
+// ============ GRAPH API METHODS ============
+
+// GetGraphData returns the knowledge graph data
+func (a *App) GetGraphData() (*graph.GraphData, error) {
+	if a.graph == nil {
+		return &graph.GraphData{Nodes: []graph.Node{}, Links: []graph.Link{}}, nil
+	}
+
+	return a.graph.BuildGraph()
+}
+
+// GetGraphConfig returns the graph configuration
+func (a *App) GetGraphConfig() (config.GraphConfig, error) {
+	return a.cfg.GetGraphConfig(), nil
+}
+
+// SetGraphConfig sets the graph configuration
+func (a *App) SetGraphConfig(minSimilarityThreshold float32, maxNodes int, showImplicitLinks bool) error {
+	cfg := config.GraphConfig{
+		MinSimilarityThreshold: minSimilarityThreshold,
+		MaxNodes:                 maxNodes,
+		ShowImplicitLinks:       showImplicitLinks,
+	}
+	a.cfg.SetGraphConfig(cfg)
+	return a.cfg.Save()
+}
+
+// ============ LLM CONFIG API METHODS ============
+
+// GetLLMConfig returns the LLM configuration
+func (a *App) GetLLMConfig() (config.LLMConfig, error) {
+	return a.cfg.GetLLMConfig(), nil
+}
+
+// SetLLMConfig sets the LLM configuration
+func (a *App) SetLLMConfig(provider string, model string, temperature float32, maxTokens int) error {
+	llmConfig := config.LLMConfig{
+		Provider:    provider,
+		Model:       model,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
+	}
+
+	a.cfg.SetLLMConfig(llmConfig)
+
+	// Reinitialize LLM provider
+	a.initializeLLM()
+
+	// Reinitialize RAG service if needed
+	if a.rag != nil {
+		a.initializeRAG()
+	}
+
+	return a.cfg.Save()
 }

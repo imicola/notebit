@@ -42,8 +42,20 @@ export function GetDatabaseStats() {
   return window['go']['main']['App']['GetDatabaseStats']();
 }
 
+export function GetGraphConfig() {
+  return window['go']['main']['App']['GetGraphConfig']();
+}
+
+export function GetGraphData() {
+  return window['go']['main']['App']['GetGraphData']();
+}
+
 export function GetIndexedFile(arg1) {
   return window['go']['main']['App']['GetIndexedFile'](arg1);
+}
+
+export function GetLLMConfig() {
+  return window['go']['main']['App']['GetLLMConfig']();
 }
 
 export function GetOllamaConfig() {
@@ -52,6 +64,14 @@ export function GetOllamaConfig() {
 
 export function GetOpenAIConfig() {
   return window['go']['main']['App']['GetOpenAIConfig']();
+}
+
+export function GetRAGConfig() {
+  return window['go']['main']['App']['GetRAGConfig']();
+}
+
+export function GetRAGStatus() {
+  return window['go']['main']['App']['GetRAGStatus']();
 }
 
 export function GetSimilarityStatus() {
@@ -84,6 +104,10 @@ export function OpenFolder() {
 
 export function ProcessDocument(arg1) {
   return window['go']['main']['App']['ProcessDocument'](arg1);
+}
+
+export function RAGQuery(arg1) {
+  return window['go']['main']['App']['RAGQuery'](arg1);
 }
 
 export function ReadFile(arg1) {
@@ -122,12 +146,24 @@ export function SetFolder(arg1) {
   return window['go']['main']['App']['SetFolder'](arg1);
 }
 
+export function SetGraphConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetGraphConfig'](arg1, arg2, arg3);
+}
+
+export function SetLLMConfig(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['SetLLMConfig'](arg1, arg2, arg3, arg4);
+}
+
 export function SetOllamaConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetOllamaConfig'](arg1, arg2, arg3);
 }
 
 export function SetOpenAIConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetOpenAIConfig'](arg1, arg2, arg3);
+}
+
+export function SetRAGConfig(arg1, arg2, arg3) {
+  return window['go']['main']['App']['SetRAGConfig'](arg1, arg2, arg3);
 }
 
 export function TestOpenAIConnection(arg1, arg2, arg3, arg4) {

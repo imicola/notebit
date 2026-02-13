@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FolderOpen, X, Monitor, Save, Settings, Menu, Sparkles } from 'lucide-react';
+import { FolderOpen, X, Monitor, Save, Settings, Menu, Sparkles, MessageSquare, Network } from 'lucide-react';
 import { OpenFolder, ListFiles, ReadFile, SaveFile, SetFolder } from '../wailsjs/go/main/App';
 import FileTree from './components/FileTree';
 import Editor from './components/Editor';
+import ChatPanel from './components/ChatPanel';
+import GraphPanel from './components/GraphPanel';
 import CommandPalette from './components/CommandPalette';
 import Toast from './components/Toast';
 import SettingsModal from './components/SettingsModal';
@@ -33,6 +35,9 @@ function App() {
   const [rightSidebarWidth, setRightSidebarWidth] = useState(SEMANTIC_SEARCH.DEFAULT_WIDTH);
   const [isResizingRight, setIsResizingRight] = useState(false);
   const [searchTrigger, setSearchTrigger] = useState(0);  // Trigger for search on save
+
+  // View mode state
+  const [viewMode, setViewMode] = useState('editor'); // 'editor' | 'chat' | 'graph'
 
   // Settings State
   const [appSettings, setAppSettings] = useState({
@@ -221,6 +226,30 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Handle open-file event from ChatPanel and GraphPanel
+  useEffect(() => {
+    const handleOpenFile = (e) => {
+      const { path } = e.detail;
+      // Find the file in fileTree and select it
+      const findAndSelectFile = (nodes) => {
+        for (const node of nodes) {
+          if (node.path === path && !node.isDir) {
+            handleFileSelect(node);
+            return true;
+          }
+          if (node.children && findAndSelectFile(node.children)) {
+            return true;
+          }
+        }
+        return false;
+      };
+      findAndSelectFile(fileTree);
+      setViewMode('editor');
+    };
+    window.addEventListener('open-file', handleOpenFile);
+    return () => window.removeEventListener('open-file', handleOpenFile);
+  }, [fileTree]);
+
   // Commands for Palette
   const commands = [
     {
@@ -302,7 +331,40 @@ function App() {
               <span className="text-xs text-muted">The Sanctuary</span>
             </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2 items-center">
+          {/* View Mode Buttons */}
+          <div className="flex gap-1 bg-modifier-hover rounded-lg p-1 mr-3">
+            <button
+              onClick={() => setViewMode('editor')}
+              className={clsx(
+                'p-1.5 rounded transition-colors',
+                viewMode === 'editor' ? 'bg-primary-alt text-normal' : 'text-muted hover:text-normal'
+              )}
+              title="Editor View"
+            >
+              <MessageSquare size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('chat')}
+              className={clsx(
+                'p-1.5 rounded transition-colors',
+                viewMode === 'chat' ? 'bg-primary-alt text-normal' : 'text-muted hover:text-normal'
+              )}
+              title="Chat View"
+            >
+              <Sparkles size={16} />
+            </button>
+            <button
+              onClick={() => setViewMode('graph')}
+              className={clsx(
+                'p-1.5 rounded transition-colors',
+                viewMode === 'graph' ? 'bg-primary-alt text-normal' : 'text-muted hover:text-normal'
+              )}
+              title="Graph View"
+            >
+              <Network size={16} />
+            </button>
+          </div>
           <button
             className="flex items-center justify-center w-9 h-9 bg-modifier-hover text-muted border border-modifier-border rounded hover:bg-modifier-border-focus hover:text-normal transition-colors"
             onClick={() => setIsSettingsOpen(true)}
@@ -361,49 +423,66 @@ function App() {
           />
         )}
 
-        {/* Editor Area */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-primary relative">
-          {currentFile ? (
-            <Editor
-              content={currentContent}
-              onChange={handleContentChange}
-              onSave={handleSave}
-              filename={currentFile.name}
-              isZenMode={isZenMode}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-faint">
-              <div className="opacity-30 mb-5">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
+        {/* Main Content Area */}
+        {viewMode === 'chat' ? (
+          /* Chat Panel View */
+          <div className="flex-1 overflow-hidden bg-primary">
+            <ChatPanel />
+          </div>
+        ) : viewMode === 'graph' ? (
+          /* Graph Panel View */
+          <div className="flex-1 overflow-hidden bg-primary">
+            <GraphPanel />
+          </div>
+        ) : (
+          /* Editor View (default) */
+          <div className="flex-1 flex flex-col overflow-hidden bg-primary relative">
+            {currentFile ? (
+              <Editor
+                content={currentContent}
+                onChange={handleContentChange}
+                onSave={handleSave}
+                filename={currentFile.name}
+                isZenMode={isZenMode}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-faint">
+                <div className="opacity-30 mb-5">
+                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-medium text-muted mb-2">Welcome to Notebit</h2>
+                <p className="text-sm">Select a file from the sidebar or open a folder to get started</p>
+                <div className="mt-8 text-xs text-muted flex gap-4">
+                  <span className="flex items-center gap-1"><span className="px-1.5 py-0.5 bg-primary-alt rounded border border-modifier-border font-mono">Cmd+K</span> to search</span>
+                  <span className="flex items-center gap-1"><span className="px-1.5 py-0.5 bg-primary-alt rounded border border-modifier-border font-mono">F11</span> for Zen Mode</span>
+                </div>
               </div>
-              <h2 className="text-2xl font-medium text-muted mb-2">Welcome to Notebit</h2>
-              <p className="text-sm">Select a file from the sidebar or open a folder to get started</p>
-              <div className="mt-8 text-xs text-muted flex gap-4">
-                <span className="flex items-center gap-1"><span className="px-1.5 py-0.5 bg-primary-alt rounded border border-modifier-border font-mono">Cmd+K</span> to search</span>
-                <span className="flex items-center gap-1"><span className="px-1.5 py-0.5 bg-primary-alt rounded border border-modifier-border font-mono">F11</span> for Zen Mode</span>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Right Sidebar - Similar Notes */}
-        <SimilarNotesSidebar
-          query={currentContent}
-          triggerSearch={searchTrigger}
-          isOpen={isRightSidebarOpen && !isZenMode}
-          onClose={() => setIsRightSidebarOpen(false)}
-          onNoteClick={(note) => handleFileSelect({ path: note.path, name: note.title })}
-          width={rightSidebarWidth}
-        />
+        {/* Only show in editor mode */}
+        {viewMode === 'editor' && (
+          <SimilarNotesSidebar
+            query={currentContent}
+            triggerSearch={searchTrigger}
+            isOpen={isRightSidebarOpen && !isZenMode}
+            onClose={() => setIsRightSidebarOpen(false)}
+            onNoteClick={(note) => handleFileSelect({ path: note.path, name: note.title })}
+            width={rightSidebarWidth}
+          />
+        )}
 
         {/* Right Sidebar Resizer Handle */}
-        {!isZenMode && isRightSidebarOpen && (
+        {/* Only show in editor mode */}
+        {viewMode === 'editor' && !isZenMode && isRightSidebarOpen && (
           <div
             className="w-1 bg-transparent hover:bg-accent cursor-col-resize absolute top-0 bottom-0 z-10 transition-colors"
             style={{ right: rightSidebarWidth - 4 }}

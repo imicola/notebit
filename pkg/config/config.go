@@ -11,6 +11,7 @@ import (
 // Config holds the application configuration
 type Config struct {
 	mu sync.RWMutex
+	configPath string
 
 	// AI Configuration
 	AI AIConfig `json:"ai"`
@@ -20,6 +21,15 @@ type Config struct {
 
 	// Watcher Configuration
 	Watcher WatcherConfig `json:"watcher"`
+
+	// LLM Configuration (for chat completion)
+	LLM LLMConfig `json:"llm"`
+
+	// RAG Configuration
+	RAG RAGConfig `json:"rag"`
+
+	// Graph Configuration
+	Graph GraphConfig `json:"graph"`
 }
 
 // AIConfig holds AI service configuration
@@ -106,10 +116,48 @@ type WatcherConfig struct {
 	FullIndexOnStart bool `json:"full_index_on_start"`
 }
 
+// LLMConfig holds LLM (chat completion) configuration
+type LLMConfig struct {
+	// Provider is the LLM provider ("openai")
+	Provider string `json:"provider"`
+
+	// Model is the default chat model
+	Model string `json:"model"`
+
+	// Temperature controls response randomness (0.0 - 2.0)
+	Temperature float32 `json:"temperature"`
+
+	// MaxTokens is the maximum tokens for completion
+	MaxTokens int `json:"max_tokens"`
+}
+
+// RAGConfig holds RAG (Retrieval Augmented Generation) configuration
+type RAGConfig struct {
+	// MaxContextChunks is the maximum number of chunks to include as context
+	MaxContextChunks int `json:"max_context_chunks"`
+
+	// Temperature for RAG responses
+	Temperature float32 `json:"temperature"`
+
+	// SystemPrompt is the system prompt for RAG
+	SystemPrompt string `json:"system_prompt"`
+}
+
+// GraphConfig holds knowledge graph configuration
+type GraphConfig struct {
+	// MinSimilarityThreshold is the minimum similarity for implicit links
+	MinSimilarityThreshold float32 `json:"min_similarity_threshold"`
+
+	// MaxNodes is the maximum number of nodes to display
+	MaxNodes int `json:"max_nodes"`
+
+	// ShowImplicitLinks controls whether to show semantic similarity links
+	ShowImplicitLinks bool `json:"show_implicit_links"`
+}
+
 var (
 	globalConfig *Config
 	once         sync.Once
-	configPath   string
 )
 
 func New() *Config {
@@ -161,6 +209,22 @@ func (c *Config) setDefaults() {
 	c.Watcher.DebounceMS = 500
 	c.Watcher.Workers = 3
 	c.Watcher.FullIndexOnStart = true
+
+	// LLM Defaults
+	c.LLM.Provider = "openai"
+	c.LLM.Model = "gpt-4o-mini"
+	c.LLM.Temperature = 0.7
+	c.LLM.MaxTokens = 2000
+
+	// RAG Defaults
+	c.RAG.MaxContextChunks = 5
+	c.RAG.Temperature = 0.7
+	// SystemPrompt set at runtime, uses ai.DefaultSystemPrompt as default
+
+	// Graph Defaults
+	c.Graph.MinSimilarityThreshold = 0.75
+	c.Graph.MaxNodes = 100
+	c.Graph.ShowImplicitLinks = true
 }
 
 // LoadFromFile loads configuration from a JSON file
@@ -168,7 +232,7 @@ func (c *Config) LoadFromFile(path string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	configPath = path
+	c.configPath = path
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -212,10 +276,13 @@ func (c *Config) SaveToFile(path string) error {
 
 // Save saves the configuration to the last loaded path
 func (c *Config) Save() error {
-	if configPath == "" {
+	c.mu.RLock()
+	path := c.configPath
+	c.mu.RUnlock()
+	if path == "" {
 		return errors.New("no config path set")
 	}
-	return c.SaveToFile(configPath)
+	return c.SaveToFile(path)
 }
 
 // mergeWithDefaults merges loaded config with defaults
@@ -437,4 +504,52 @@ func (c *Config) SetWatcherConfig(cfg WatcherConfig) {
 	defer c.mu.Unlock()
 
 	c.Watcher = cfg
+}
+
+// GetLLMConfig returns a copy of the LLM configuration
+func (c *Config) GetLLMConfig() LLMConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.LLM
+}
+
+// SetLLMConfig sets the LLM configuration
+func (c *Config) SetLLMConfig(cfg LLMConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.LLM = cfg
+}
+
+// GetRAGConfig returns a copy of the RAG configuration
+func (c *Config) GetRAGConfig() RAGConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.RAG
+}
+
+// SetRAGConfig sets the RAG configuration
+func (c *Config) SetRAGConfig(cfg RAGConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.RAG = cfg
+}
+
+// GetGraphConfig returns a copy of the Graph configuration
+func (c *Config) GetGraphConfig() GraphConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.Graph
+}
+
+// SetGraphConfig sets the Graph configuration
+func (c *Config) SetGraphConfig(cfg GraphConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.Graph = cfg
 }

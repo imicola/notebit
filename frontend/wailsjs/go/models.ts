@@ -24,6 +24,40 @@ export namespace config {
 	        this.heading_separator = source["heading_separator"];
 	    }
 	}
+	export class GraphConfig {
+	    min_similarity_threshold: number;
+	    max_nodes: number;
+	    show_implicit_links: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new GraphConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.min_similarity_threshold = source["min_similarity_threshold"];
+	        this.max_nodes = source["max_nodes"];
+	        this.show_implicit_links = source["show_implicit_links"];
+	    }
+	}
+	export class LLMConfig {
+	    provider: string;
+	    model: string;
+	    temperature: number;
+	    max_tokens: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.model = source["model"];
+	        this.temperature = source["temperature"];
+	        this.max_tokens = source["max_tokens"];
+	    }
+	}
 	export class OllamaConfig {
 	    base_url: string;
 	    embedding_model: string;
@@ -56,6 +90,22 @@ export namespace config {
 	        this.base_url = source["base_url"];
 	        this.organization = source["organization"];
 	        this.embedding_model = source["embedding_model"];
+	    }
+	}
+	export class RAGConfig {
+	    max_context_chunks: number;
+	    temperature: number;
+	    system_prompt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RAGConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.max_context_chunks = source["max_context_chunks"];
+	        this.temperature = source["temperature"];
+	        this.system_prompt = source["system_prompt"];
 	    }
 	}
 
@@ -314,6 +364,84 @@ export namespace gorm {
 		    return a;
 		}
 	}
+
+}
+
+export namespace graph {
+	
+	export class Link {
+	    source: string;
+	    target: string;
+	    type: string;
+	    strength: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Link(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.target = source["target"];
+	        this.type = source["type"];
+	        this.strength = source["strength"];
+	    }
+	}
+	export class Node {
+	    id: string;
+	    label: string;
+	    type: string;
+	    path: string;
+	    size: number;
+	    val: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Node(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.type = source["type"];
+	        this.path = source["path"];
+	        this.size = source["size"];
+	        this.val = source["val"];
+	    }
+	}
+	export class GraphData {
+	    nodes: Node[];
+	    links: Link[];
+	
+	    static createFrom(source: any = {}) {
+	        return new GraphData(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodes = this.convertValues(source["nodes"], Node);
+	        this.links = this.convertValues(source["links"], Link);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 
 }
 

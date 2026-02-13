@@ -130,10 +130,12 @@ notebit/
 
 *   **任务 4.1: RAG 对话系统 (Chat)**
     *   开发独立的 Chat 界面。
+    *   开发关于 Chat 的ai配置设置
     *   后端实现 RAG 流程：Query -> Vector Search -> Context Assembly -> LLM Prompt -> Response。
     *   实现引用标注功能 (解析 `[[Link]]`)。
 *   **任务 4.2: 知识图谱 (Visualization)**
     *   前端集成力导向图库 (如 `react-force-graph`)。
+    *   样式参考obsidian关系图谱
     *   后端聚合数据：显式链接 (Wiki Links) + 隐式链接 (语义相似度 > 阈值)。
     *   实现图谱节点的交互跳转。
 
