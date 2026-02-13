@@ -4,15 +4,19 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
-import { syntaxHighlighting, HighlightStyle } from '@codemirror/language';
+import { syntaxHighlighting, HighlightStyle, syntaxTree } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { MatchDecorator, ViewPlugin, Decoration } from '@codemirror/view';
+import { autocompletion } from '@codemirror/autocomplete';
 import MarkdownIt from 'markdown-it';
 import markdownItGithubAlerts from 'markdown-it-github-alerts';
 import DOMPurify from 'dompurify';
 import clsx from 'clsx';
 import { Split, Eye, Edit3, Save } from 'lucide-react';
 import { VIEW_MODES } from '../constants';
+import { injectSourceLinePlugin, calculatePreviewScrollPosition, calculateEditorScrollPosition } from '../utils/lineMapper';
+import { parseWikiLink, findFilePathByName, extractAllNotes, scrollToHeading, createWikiLinkAutocomplete } from '../services/wikiLinkService';
+import { indentGuidesPlugin, indentGuidesTheme } from './indentGuides';
 
 // --- Custom Syntax Highlighting (Obsidian-like) ---
 const obsidianHighlightStyle = HighlightStyle.define([
@@ -31,11 +35,6 @@ const highlightDecorator = new MatchDecorator({
   decoration: Decoration.mark({ class: 'bg-obsidian-yellow/30 text-obsidian-yellow rounded px-0.5' }),
 });
 
-const wikiLinkDecorator = new MatchDecorator({
-  regexp: /\[\[[^\]]+\]\]/g,
-  decoration: Decoration.mark({ class: 'text-obsidian-purple hover:underline cursor-pointer' }),
-});
-
 // Separate plugins for highlight and wiki-link decorations
 const highlightPlugin = ViewPlugin.define(
   (view) => ({
@@ -45,13 +44,64 @@ const highlightPlugin = ViewPlugin.define(
   { decorations: (v) => v.decorations }
 );
 
-const wikiPlugin = ViewPlugin.define(
-  (view) => ({
-    decorations: wikiLinkDecorator.createDeco(view),
-    update(u) { this.decorations = wikiLinkDecorator.updateDeco(u, this.decorations); }
-  }),
-  { decorations: (v) => v.decorations }
-);
+/**
+ * Create wiki link plugin with click handling
+ * @param {Function} onWikiLinkClick - Callback when wiki link is clicked
+ * @returns {ViewPlugin} CodeMirror ViewPlugin
+ */
+const createWikiLinkPlugin = (onWikiLinkClick) => {
+  // Decorator for wiki links
+  const wikiLinkDecorator = new MatchDecorator({
+    regexp: /\[\[[^\]]+\]\]/g,
+    decoration: (match, view, pos) => {
+      return Decoration.mark({
+        class: 'text-obsidian-purple hover:underline cursor-pointer wiki-link',
+        attributes: {
+          'data-wiki-link': match[0],
+          'data-pos': pos.toString(),
+        }
+      });
+    },
+  });
+
+  return ViewPlugin.define(
+    (view) => {
+      const plugin = {
+        decorations: wikiLinkDecorator.createDeco(view),
+        
+        update(update) {
+          this.decorations = wikiLinkDecorator.updateDeco(update, this.decorations);
+        },
+      };
+
+      // Handle click events on wiki links
+      const handleClick = (event) => {
+        const target = event.target;
+        if (target.classList.contains('wiki-link') || target.closest('.wiki-link')) {
+          const linkElement = target.classList.contains('wiki-link') ? target : target.closest('.wiki-link');
+          const wikiLinkText = linkElement.getAttribute('data-wiki-link');
+          
+          if (wikiLinkText && onWikiLinkClick) {
+            event.preventDefault();
+            onWikiLinkClick(wikiLinkText);
+          }
+        }
+      };
+
+      view.dom.addEventListener('click', handleClick);
+      
+      // Store cleanup function
+      plugin.destroy = () => {
+        view.dom.removeEventListener('click', handleClick);
+      };
+
+      return plugin;
+    },
+    { 
+      decorations: (v) => v.decorations,
+    }
+  );
+};
 
 
 // --- Theme ---
@@ -69,7 +119,7 @@ const editorTheme = EditorView.theme({
 });
 
 // --- Main Component ---
-const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
+const Editor = ({ content, onChange, onSave, filename, isZenMode, fileTree, onSelectFile }) => {
   const editorRef = useRef(null);
   const viewRef = useRef(null);
   const previewRef = useRef(null);
@@ -89,6 +139,43 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
     onSaveRef.current = onSave;
   }, [onSave]);
 
+  // Wiki link click handler
+  const handleWikiLinkClick = useCallback((linkText) => {
+    const parsed = parseWikiLink(linkText);
+    if (!parsed) {
+      console.warn('Failed to parse wiki link:', linkText);
+      return;
+    }
+
+    // Find target file
+    const targetPath = findFilePathByName(parsed.noteName, fileTree);
+    if (!targetPath) {
+      console.warn('Note not found:', parsed.noteName);
+      // TODO: Show toast notification
+      return;
+    }
+
+    // Navigate to file
+    if (onSelectFile) {
+      onSelectFile(targetPath);
+      
+      // If heading anchor is present, scroll to it after file loads
+      if (parsed.heading) {
+        // Delay to allow file to load
+        setTimeout(() => {
+          if (viewRef.current) {
+            scrollToHeading(viewRef.current, parsed.heading);
+          }
+        }, 200);
+      }
+    }
+  }, [fileTree, onSelectFile]);
+
+  // Extract all notes for autocomplete
+  const allNotes = useMemo(() => {
+    return fileTree ? extractAllNotes(fileTree) : [];
+  }, [fileTree]);
+
   // Markdown It setup
   const md = useMemo(() => {
     const m = new MarkdownIt({
@@ -99,6 +186,9 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
 
     // Enable GitHub Alerts (compatible with Obsidian Callouts: > [!NOTE] etc.)
     m.use(markdownItGithubAlerts);
+
+    // Inject source line attributes for precise scrolling sync
+    injectSourceLinePlugin(m);
 
     return m;
   }, []);
@@ -126,6 +216,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
         markdown({ base: markdownLanguage, codeLanguages: languages }),
         syntaxHighlighting(obsidianHighlightStyle, { fallback: true }),
         editorTheme,
+        indentGuidesTheme, // Indent guides styling
         highlightActiveLine(),
         keymap.of([
             ...defaultKeymap,
@@ -133,7 +224,12 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
             { key: "Mod-s", run: () => { handleSave(); return true; } }
         ]),
         highlightPlugin,
-        wikiPlugin,
+        createWikiLinkPlugin(handleWikiLinkClick), // Wiki link plugin with click handling
+        indentGuidesPlugin, // Visual indent guides
+        autocompletion({
+          override: [createWikiLinkAutocomplete(allNotes)], // Wiki link autocomplete
+          activateOnTyping: true,
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const newContent = update.state.doc.toString();
@@ -154,7 +250,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
     return () => {
       view.destroy();
     };
-  }, [handleSave]);
+  }, [handleSave, handleWikiLinkClick, allNotes]);
 
   // Update content if changed externally (e.g. file switch)
   useEffect(() => {
@@ -167,7 +263,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
     }
   }, [content]);
 
-  // Sync Scroll Effect
+  // Sync Scroll Effect - Enhanced with Line Mapping
   useEffect(() => {
     if (!viewRef.current || !previewRef.current || viewMode === 'edit') return;
 
@@ -178,11 +274,26 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
       if (isScrollingRef.current === 'preview') return;
       isScrollingRef.current = 'editor';
       
-      const percentage = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
-      
-      if (isFinite(percentage)) {
-          const previewScrollTop = percentage * (previewScroller.scrollHeight - previewScroller.clientHeight);
-          previewScroller.scrollTop = previewScrollTop;
+      try {
+        // Use line-based mapping for precise synchronization
+        const targetScrollTop = calculatePreviewScrollPosition(
+          editorScroller.scrollTop,
+          editorScroller.scrollHeight,
+          editorScroller.clientHeight,
+          viewRef.current,
+          previewScroller
+        );
+        
+        if (isFinite(targetScrollTop)) {
+          previewScroller.scrollTop = targetScrollTop;
+        }
+      } catch (error) {
+        console.warn('Editor scroll sync error:', error);
+        // Fallback to percentage-based sync
+        const percentage = editorScroller.scrollTop / (editorScroller.scrollHeight - editorScroller.clientHeight);
+        if (isFinite(percentage)) {
+          previewScroller.scrollTop = percentage * (previewScroller.scrollHeight - previewScroller.clientHeight);
+        }
       }
       
       clearTimeout(timeoutRef.current);
@@ -193,11 +304,26 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode }) => {
       if (isScrollingRef.current === 'editor') return;
       isScrollingRef.current = 'preview';
 
-      const percentage = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
-      
-      if (isFinite(percentage)) {
-          const editorScrollTop = percentage * (editorScroller.scrollHeight - editorScroller.clientHeight);
-          editorScroller.scrollTop = editorScrollTop;
+      try {
+        // Use line-based mapping for precise synchronization
+        const targetScrollTop = calculateEditorScrollPosition(
+          previewScroller.scrollTop,
+          previewScroller,
+          viewRef.current,
+          editorScroller.scrollHeight,
+          editorScroller.clientHeight
+        );
+        
+        if (isFinite(targetScrollTop)) {
+          editorScroller.scrollTop = targetScrollTop;
+        }
+      } catch (error) {
+        console.warn('Preview scroll sync error:', error);
+        // Fallback to percentage-based sync
+        const percentage = previewScroller.scrollTop / (previewScroller.scrollHeight - previewScroller.clientHeight);
+        if (isFinite(percentage)) {
+          editorScroller.scrollTop = percentage * (editorScroller.scrollHeight - editorScroller.clientHeight);
+        }
       }
 
       clearTimeout(timeoutRef.current);

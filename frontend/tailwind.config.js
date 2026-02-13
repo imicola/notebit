@@ -38,6 +38,41 @@ export default {
         'obsidian-blue': 'var(--color-blue)',
         'obsidian-purple': 'var(--color-purple)',
         'obsidian-pink': 'var(--color-pink)',
+
+        // Graph Design System Colors
+        'graph-primary': 'var(--graph-color-primary)',
+        'graph-secondary': 'var(--graph-color-secondary)',
+        'graph-accent': 'var(--graph-color-accent)',
+        'graph-neutral': 'var(--graph-color-neutral)',
+      },
+      spacing: {
+        xs: 'var(--spacing-xs)',
+        sm: 'var(--spacing-sm)',
+        md: 'var(--spacing-md)',
+        lg: 'var(--spacing-lg)',
+        xl: 'var(--spacing-xl)',
+        '2xl': 'var(--spacing-2xl)',
+      },
+      boxShadow: {
+        1: 'var(--shadow-1)',
+        2: 'var(--shadow-2)',
+        3: 'var(--shadow-3)',
+        4: 'var(--shadow-4)',
+        5: 'var(--shadow-5)',
+      },
+      borderRadius: {
+        sm: 'var(--radius-sm)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
+        full: 'var(--radius-full)',
+      },
+      transitionDuration: {
+        fast: '150ms',
+        DEFAULT: '200ms',
+        slow: '300ms',
+      },
+      transitionTimingFunction: {
+        DEFAULT: 'cubic-bezier(0, 0, 0.2, 1)', // ease-out
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-in-out',

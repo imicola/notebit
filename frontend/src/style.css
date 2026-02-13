@@ -13,10 +13,13 @@
     --accent-s: 40%;
     --accent-l: 60%;
 
+    /* Color Temperature Adjustment (for eye protection) */
+    --color-temp-adjust: 0%; /* Lightness adjustment based on color temperature */
+
     /* Text Colors */
-    --text-normal: hsl(var(--accent-h), 15%, 85%);
-    --text-muted: hsl(var(--accent-h), 12%, 75%);
-    --text-faint: hsl(var(--accent-h), 9%, 50%);
+    --text-normal: hsl(var(--accent-h), 15%, calc(85% + var(--color-temp-adjust)));
+    --text-muted: hsl(var(--accent-h), 12%, calc(75% + var(--color-temp-adjust)));
+    --text-faint: hsl(var(--accent-h), 9%, calc(50% + var(--color-temp-adjust)));
     --text-accent: hsl(calc(var(--accent-h) - 3), calc(var(--accent-s) * 1.02), calc(var(--accent-l) * 1.15));
 
     /* Background Colors */
@@ -39,6 +42,101 @@
     --color-blue: rgb(137, 189, 244);
     --color-purple: rgb(203, 158, 255);
     --color-pink: rgb(242, 182, 222);
+
+    /* Design System - Graph Color Palette (Mixed approach) */
+    --graph-color-primary: #1E88E5;
+    --graph-color-secondary: #43A047;
+    --graph-color-accent: #FF7043;
+    --graph-color-neutral: #37474F;
+
+    /* Spacing System (8px grid) */
+    --spacing-xs: 0.25rem;   /* 4px */
+    --spacing-sm: 0.5rem;    /* 8px */
+    --spacing-md: 1rem;      /* 16px */
+    --spacing-lg: 1.5rem;    /* 24px */
+    --spacing-xl: 2rem;      /* 32px */
+    --spacing-2xl: 3rem;     /* 48px */
+
+    /* Shadow System (5-level elevation) */
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --shadow-2: 0 2px 4px rgba(0, 0, 0, 0.08);
+    --shadow-3: 0 4px 8px rgba(0, 0, 0, 0.12);
+    --shadow-4: 0 8px 16px rgba(0, 0, 0, 0.16);
+    --shadow-5: 0 16px 32px rgba(0, 0, 0, 0.20);
+
+    /* Border Radius System */
+    --radius-sm: 0.25rem;    /* 4px */
+    --radius-md: 0.5rem;     /* 8px */
+    --radius-lg: 1rem;       /* 16px */
+    --radius-full: 9999px;
+
+    /* Transition System */
+    --transition-fast: 150ms ease-out;
+    --transition-base: 200ms ease-out;
+    --transition-slow: 300ms ease-out;
+  }
+
+  /* Amber Theme - Warm eye protection theme */
+  :root[data-theme="amber"] {
+    --accent-h: 30;
+    --accent-s: 80%;
+    --accent-l: 50%;
+    
+    --text-normal: hsl(30, 30%, calc(85% + var(--color-temp-adjust)));
+    --text-muted: hsl(30, 25%, calc(75% + var(--color-temp-adjust)));
+    --text-faint: hsl(30, 20%, calc(50% + var(--color-temp-adjust)));
+    --text-accent: hsl(28, 85%, 65%);
+    
+    --background-primary: hsl(30, 40%, 12%);
+    --background-primary-alt: hsl(30, 40%, 15%);
+    --background-secondary: hsl(30, 35%, 10%);
+    --background-secondary-alt: hsl(30, 35%, 18%);
+    --background-modifier-hover: hsla(30, 50%, 30%, 0.25);
+    
+    --background-modifier-border: hsla(30, 40%, 50%, 0.2);
+    --background-modifier-border-focus: hsla(30, 40%, 50%, 0.3);
+  }
+
+  /* Forest Theme - Green eye protection theme */
+  :root[data-theme="forest"] {
+    --accent-h: 150;
+    --accent-s: 40%;
+    --accent-l: 45%;
+    
+    --text-normal: hsl(150, 25%, calc(85% + var(--color-temp-adjust)));
+    --text-muted: hsl(150, 20%, calc(75% + var(--color-temp-adjust)));
+    --text-faint: hsl(150, 15%, calc(50% + var(--color-temp-adjust)));
+    --text-accent: hsl(150, 50%, 60%);
+    
+    --background-primary: hsl(150, 25%, 12%);
+    --background-primary-alt: hsl(150, 25%, 15%);
+    --background-secondary: hsl(150, 20%, 10%);
+    --background-secondary-alt: hsl(150, 20%, 18%);
+    --background-modifier-hover: hsla(150, 30%, 30%, 0.25);
+    
+    --background-modifier-border: hsla(150, 30%, 50%, 0.2);
+    --background-modifier-border-focus: hsla(150, 30%, 50%, 0.3);
+  }
+
+  /* Space Theme - Dark gray eye protection theme */
+  :root[data-theme="space"] {
+    --accent-h: 220;
+    --accent-s: 20%;
+    --accent-l: 40%;
+    
+    --text-normal: hsl(220, 15%, calc(85% + var(--color-temp-adjust)));
+    --text-muted: hsl(220, 12%, calc(75% + var(--color-temp-adjust)));
+    --text-faint: hsl(220, 10%, calc(50% + var(--color-temp-adjust)));
+    --text-accent: hsl(220, 25%, 65%);
+    
+    --background-primary: hsl(220, 18%, 10%);
+    --background-primary-alt: hsl(220, 18%, 13%);
+    --background-secondary: hsl(220, 15%, 8%);
+    --background-secondary-alt: hsl(220, 15%, 16%);
+    --background-modifier-hover: hsla(220, 20%, 25%, 0.25);
+    
+    --background-modifier-border: hsla(220, 20%, 40%, 0.2);
+    --background-modifier-border-focus: hsla(220, 20%, 40%, 0.3);
   }
 
   html,
@@ -46,6 +144,7 @@
     @apply h-full w-full overflow-hidden antialiased;
     background-color: var(--background-primary);
     color: var(--text-normal);
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   #root {
@@ -120,4 +219,86 @@
   .markdown-alert-important { --callout-color: var(--color-purple); }
   .markdown-alert-warning { --callout-color: var(--color-orange); }
   .markdown-alert-caution { --callout-color: var(--color-red); }
+
+  /* Wiki Link Highlight Animation */
+  @keyframes wikiLinkHighlight {
+    0% {
+      background-color: var(--color-purple);
+      opacity: 0.5;
+    }
+    50% {
+      background-color: var(--color-purple);
+      opacity: 0.3;
+    }
+    100% {
+      background-color: transparent;
+      opacity: 0;
+    }
+  }
+
+  .wiki-link-highlight {
+    animation: wikiLinkHighlight 2s ease-out;
+  }
+
+  /* Ripple Animation for Buttons */
+  @keyframes ripple {
+    to {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+
+  .ripple-container {
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Fade In Animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Slide In Animation */
+  @keyframes slideIn {
+    from {
+      transform: translateY(10px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* List Item Hover Effect */
+  .list-item-hover {
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+  }
+
+  .list-item-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-3);
+  }
+
+  /* Button Ripple Base Styles */
+  button.ripple-button {
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Toggle Switch Animation */
+  .toggle-switch {
+    transition: background-color var(--transition-base);
+  }
+
+  .toggle-switch-handle {
+    transition: transform var(--transition-base);
+  }
 }
+
+

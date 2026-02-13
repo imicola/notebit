@@ -11,30 +11,31 @@ import (
 )
 
 var wikiLinkRegex = regexp.MustCompile(`\[\[([^\]]+)\]\]`)
+var tagRegex = regexp.MustCompile(`#([\w\p{L}-]+)`)
 
 // Service handles knowledge graph operations
 type Service struct {
 	mu  sync.RWMutex
-	db   *database.Manager
-	cfg  *config.Config
+	db  *database.Manager
+	cfg *config.Config
 }
 
 // Node represents a node in the knowledge graph
 type Node struct {
 	ID    string  `json:"id"`
 	Label string  `json:"label"`
-	Type  string  `json:"type"`      // "file"
-	Path  string  `json:"path"`      // File path (for navigation)
-	Size  int     `json:"size"`      // Number of connections
-	Val   float64 `json:"val"`       // Centrality/importance
+	Type  string  `json:"type"` // "file"
+	Path  string  `json:"path"` // File path (for navigation)
+	Size  int     `json:"size"` // Number of connections
+	Val   float64 `json:"val"`  // Centrality/importance
 }
 
 // Link represents a link between nodes
 type Link struct {
 	Source   string  `json:"source"`
 	Target   string  `json:"target"`
-	Type     string  `json:"type"`      // "explicit" (wiki link), "implicit" (semantic)
-	Strength float32 `json:"strength"`  // Similarity score for implicit links
+	Type     string  `json:"type"`     // "explicit" (wiki link), "implicit" (semantic)
+	Strength float32 `json:"strength"` // Similarity score for implicit links
 }
 
 // GraphData represents the complete graph structure
@@ -79,8 +80,33 @@ func (s *Service) BuildGraph() (*GraphData, error) {
 
 	// Calculate node sizes based on connections
 	nodeSizeMap := s.calculateNodeSizes(links)
+
+	// Add tag nodes found in links
+	tagNodes := make(map[string]bool)
+	for _, link := range links {
+		if strings.HasPrefix(link.Target, "tag:") {
+			tagID := link.Target
+			if _, exists := tagNodes[tagID]; !exists {
+				tagName := strings.TrimPrefix(tagID, "tag:")
+				nodes = append(nodes, Node{
+					ID:    tagID,
+					Label: "#" + tagName,
+					Type:  "tag",
+					Path:  "",
+					Size:  0,
+					Val:   1.0,
+				})
+				tagNodes[tagID] = true
+			}
+		}
+	}
+
 	for i := range nodes {
 		nodes[i].Size = nodeSizeMap[nodes[i].ID]
+		// Identify Concept nodes (high connectivity files)
+		if nodes[i].Type == "file" && nodes[i].Size >= 5 {
+			nodes[i].Type = "concept"
+		}
 	}
 
 	return &GraphData{
@@ -97,10 +123,10 @@ func (s *Service) buildNodes(files []database.File) []Node {
 		nodes = append(nodes, Node{
 			ID:    generateNodeID("file", file.Path),
 			Label: file.Title,
-			Type:   "file",
-			Path:   file.Path,
-			Size:   0, // Will be calculated based on links
-			Val:    1.0,
+			Type:  "file",
+			Path:  file.Path,
+			Size:  0, // Will be calculated based on links
+			Val:   1.0,
 		})
 	}
 
@@ -115,12 +141,50 @@ func (s *Service) buildLinks(files []database.File, repo *database.Repository, g
 	wikiLinks := s.extractWikiLinks(files)
 	links = append(links, wikiLinks...)
 
-	// 2. Extract implicit links (semantic similarity)
+	// 2. Extract tag links
+	tagLinks := s.extractTagLinks(files)
+	links = append(links, tagLinks...)
+
+	// 3. Extract implicit links (semantic similarity)
 	if graphConfig.ShowImplicitLinks {
 		implicitLinks := s.extractImplicitLinks(files, repo, graphConfig.MinSimilarityThreshold)
 		links = append(links, implicitLinks...)
 	}
 
+	return links
+}
+
+// extractTagLinks parses markdown for #tags
+func (s *Service) extractTagLinks(files []database.File) []Link {
+	var links []Link
+
+	for _, file := range files {
+		seenTags := make(map[string]bool)
+		for _, chunk := range file.Chunks {
+			matches := tagRegex.FindAllStringSubmatch(chunk.Content, -1)
+
+			for _, match := range matches {
+				if len(match) < 2 {
+					continue
+				}
+
+				tagName := match[1]
+				if seenTags[tagName] {
+					continue
+				}
+				seenTags[tagName] = true
+
+				link := Link{
+					Source:   generateNodeID("file", file.Path),
+					Target:   generateNodeID("tag", tagName), // Helper handles prefix? No, generateNodeID does.
+					Type:     "tag",
+					Strength: 1.0,
+				}
+
+				links = append(links, link)
+			}
+		}
+	}
 	return links
 }
 

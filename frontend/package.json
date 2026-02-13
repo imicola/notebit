@@ -22,6 +22,7 @@
     "@lezer/common": "^1.5.1",
     "@lezer/highlight": "^1.2.3",
     "clsx": "^2.1.1",
+    "d3": "^7.9.0",
     "dompurify": "^3.3.1",
     "fuse.js": "^7.1.0",
     "lucide-react": "^0.563.0",
@@ -29,7 +30,7 @@
     "markdown-it-github-alerts": "^1.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "vis-network": "^9.1.13"
+    "react-force-graph-2d": "^1.29.1"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

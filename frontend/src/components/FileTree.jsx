@@ -17,10 +17,10 @@ const FileTreeRow = ({ node, level, isExpanded, isSelected, isFocused, onToggle,
   return (
     <div
       className={clsx(
-        'flex items-center gap-1.5 py-1.5 pr-2 cursor-pointer select-none text-sm transition-all duration-150 border-l-2',
-        isSelected ? 'bg-primary-alt text-accent font-medium border-[var(--text-accent)]' : 'border-transparent',
+        'flex items-center gap-1.5 py-1.5 pr-2 cursor-pointer select-none text-sm transition-all duration-200 border-l-2 list-item-hover',
+        isSelected ? 'bg-primary-alt text-accent font-medium border-[var(--text-accent)] shadow-1' : 'border-transparent',
         isFocused && !isSelected && 'bg-modifier-hover', // Visual indication for focus
-        isFocused && isSelected && 'bg-modifier-border-focus',
+        isFocused && isSelected && 'bg-modifier-border-focus shadow-2',
         !isSelected && !isFocused && 'text-muted hover:bg-modifier-hover hover:text-normal',
         node.isDir && 'font-medium'
       )}

@@ -12,12 +12,16 @@ import SimilarNotesSidebar from './components/SimilarNotesSidebar';
 import AIStatusIndicator from './components/AIStatusIndicator';
 import clsx from 'clsx';
 import { SIDEBAR, SEMANTIC_SEARCH, STORAGE_KEYS } from './constants';
-import { useSettings, useToast, useResizable, useKeyboardShortcuts, useFileOperations } from './hooks';
+import { useSettings, useToast, useResizable, useKeyboardShortcuts, useFileOperations, useTheme } from './hooks';
 
 function App() {
   // --- Hooks integration ---
   const { settings, updateSetting } = useSettings();
   const { toast, showToast, hideToast } = useToast();
+  
+  // Initialize theme system (must be called early)
+  useTheme();
+  
   const {
     fileTree, currentFile, currentContent, basePath,
     loading, error,
@@ -99,6 +103,7 @@ function App() {
   // Keyboard shortcuts via hook
   useKeyboardShortcuts({
     'F11': () => setIsZenMode(prev => !prev),
+    'Mod+Shift+f': () => setIsZenMode(prev => !prev), // Focus Mode (same as Zen Mode)
     'Mod+k': () => setIsCommandPaletteOpen(prev => !prev),
   });
 
@@ -315,6 +320,8 @@ function App() {
                 onSave={handleSave}
                 filename={currentFile.name}
                 isZenMode={isZenMode}
+                fileTree={fileTree}
+                onSelectFile={selectFile}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-faint">
