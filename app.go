@@ -75,19 +75,22 @@ func NewAppWithConfig(cfg *config.Config) *App {
 // startup is called when the app starts. The context is saved
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
+	timer := logger.StartTimer()
 	a.ctx = ctx
 	logger.Info("App startup initiated")
+	
 	if err := a.loadConfig(); err != nil {
-		logger.Error("Failed to load config: %v", err)
+		logger.ErrorWithFields(ctx, map[string]interface{}{"error": err.Error()}, "Failed to load config")
 		runtime.LogErrorf(a.ctx, "Failed to load config: %v", err)
 	}
+	
 	a.initializeAI()
 	a.initializeLLM()
 
 	// Start file watcher if database is initialized and base path is set
 	if a.dbm.IsInitialized() && a.fm.GetBasePath() != "" {
 		if err := a.startWatcher(); err != nil {
-			logger.Error("Failed to start watcher: %v", err)
+			logger.ErrorWithFields(ctx, map[string]interface{}{"base_path": a.fm.GetBasePath()}, "Failed to start watcher: %v", err)
 			runtime.LogErrorf(a.ctx, "Failed to start watcher: %v", err)
 		}
 	}
@@ -95,6 +98,8 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize RAG and Graph services after database is ready
 	a.initializeRAG()
 	a.initializeGraph()
+	
+	logger.InfoWithDuration(ctx, timer(), "App startup completed")
 }
 
 func (a *App) loadConfig() error {
@@ -108,8 +113,14 @@ func (a *App) loadConfig() error {
 
 // initializeAI initializes the AI service
 func (a *App) initializeAI() {
+	timer := logger.StartTimer()
+	logger.Debug("Initializing AI service")
+	
 	if err := a.ai.Initialize(); err != nil {
+		logger.WarnWithFields(a.ctx, map[string]interface{}{"error": err.Error()}, "AI service initialization failed")
 		runtime.LogWarningf(a.ctx, "AI service initialization failed: %v", err)
+	} else {
+		logger.InfoWithDuration(a.ctx, timer(), "AI service initialized successfully")
 	}
 }
 
@@ -246,14 +257,19 @@ func (a *App) shutdown(context.Context) {
 
 // OpenFolder opens a directory dialog and sets the base path
 func (a *App) OpenFolder() (string, error) {
+	timer := logger.StartTimer()
+	logger.Info("Opening folder dialog")
+	
 	dir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 		Title: "Select Notes Folder",
 	})
 	if err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{"error": err.Error()}, "Failed to open directory dialog")
 		return "", err
 	}
 
 	if dir == "" {
+		logger.Debug("User cancelled folder selection")
 		return "", nil
 	}
 
@@ -261,20 +277,23 @@ func (a *App) OpenFolder() (string, error) {
 	a.stopWatcher()
 
 	if err := a.fm.SetBasePath(dir); err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Failed to set base path")
 		return "", err
 	}
 
 	// Initialize database
 	if err := a.dbm.Init(dir); err != nil {
 		// Don't fail if database initialization fails - log but continue
-		fmt.Printf("Warning: database initialization failed: %v\n", err)
+		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Database initialization failed")
 	}
 
 	// Start watcher for new folder
 	if err := a.startWatcher(); err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{"path": dir}, "Failed to start watcher: %v", err)
 		runtime.LogErrorf(a.ctx, "Failed to start watcher: %v", err)
 	}
 
+	logger.InfoWithDuration(a.ctx, timer(), "Folder opened successfully: %s", dir)
 	return dir, nil
 }
 
@@ -290,7 +309,7 @@ func (a *App) SetFolder(path string) error {
 	// Initialize database
 	if err := a.dbm.Init(path); err != nil {
 		// Don't fail if database initialization fails
-		fmt.Printf("Warning: database initialization failed: %v\n", err)
+		logger.Warn("Warning: database initialization failed: %v", err)
 	}
 
 	// Start watcher for new folder
@@ -313,8 +332,18 @@ func (a *App) ReadFile(path string) (*files.NoteContent, error) {
 
 // SaveFile saves content to a markdown file
 func (a *App) SaveFile(path, content string) error {
+	timer := logger.StartTimer()
+	logger.DebugWithFields(a.ctx, map[string]interface{}{
+		"path":         path,
+		"content_size": len(content),
+	}, "Saving file")
+	
 	err := a.fm.SaveFile(path, content)
 	if err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{
+			"path":  path,
+			"error": err.Error(),
+		}, "Failed to save file")
 		return err
 	}
 
@@ -323,6 +352,7 @@ func (a *App) SaveFile(path, content string) error {
 		a.enqueueIndexFileContent(path, content)
 	}
 
+	logger.InfoWithDuration(a.ctx, timer(), "File saved: %s", path)
 	return nil
 }
 
@@ -343,17 +373,30 @@ func (a *App) CreateFile(path, content string) error {
 
 // DeleteFile deletes a markdown file or directory
 func (a *App) DeleteFile(path string) error {
+	timer := logger.StartTimer()
+	logger.InfoWithFields(a.ctx, map[string]interface{}{"path": path}, "Deleting file")
+	
 	err := a.fm.DeleteFile(path)
 	if err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{
+			"path":  path,
+			"error": err.Error(),
+		}, "Failed to delete file")
 		return err
 	}
 
 	// Remove from database index
 	if a.dbm.IsInitialized() {
 		repo := a.dbm.Repository()
-		_ = repo.DeleteFile(path)
+		if err := repo.DeleteFile(path); err != nil {
+			logger.WarnWithFields(a.ctx, map[string]interface{}{
+				"path":  path,
+				"error": err.Error(),
+			}, "Failed to delete file from index")
+		}
 	}
 
+	logger.InfoWithDuration(a.ctx, timer(), "File deleted: %s", path)
 	return nil
 }
 
@@ -402,6 +445,8 @@ func (a *App) indexFile(path string) error {
 
 // indexFileContent indexes a file with given content (avoids re-reading file)
 func (a *App) indexFileContent(path, content string) error {
+	timer := logger.StartTimer()
+	
 	if !a.dbm.IsInitialized() {
 		return fmt.Errorf("database not initialized")
 	}
@@ -410,6 +455,10 @@ func (a *App) indexFileContent(path, content string) error {
 	fullPath := filepath.Join(a.fm.GetBasePath(), path)
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{
+			"path":  path,
+			"error": err.Error(),
+		}, "Failed to stat file")
 		runtime.LogErrorf(a.ctx, "Failed to stat file %s: %v", path, err)
 		return err
 	}
@@ -417,10 +466,15 @@ func (a *App) indexFileContent(path, content string) error {
 	// Index in database
 	repo := a.dbm.Repository()
 	if err := repo.IndexFile(path, content, info.ModTime().Unix(), info.Size()); err != nil {
+		logger.ErrorWithFields(a.ctx, map[string]interface{}{
+			"path":  path,
+			"error": err.Error(),
+		}, "Failed to index file")
 		runtime.LogErrorf(a.ctx, "Failed to index file %s: %v", path, err)
 		return err
 	}
 
+	logger.DebugWithDuration(a.ctx, timer(), "File indexed: %s", path)
 	return nil
 }
 

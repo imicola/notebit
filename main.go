@@ -14,16 +14,19 @@ var assets embed.FS
 
 func main() {
 	// Initialize Logger
-	err := logger.Initialize(logger.Config{
-		Level:         logger.DEBUG,
+	err := logger.Initialize(logger.LoadConfigFromEnv(logger.Config{
+		Level:         logger.INFO,
 		LogDir:        "logs",
 		FileName:      "notebit.log",
-		MaxFileSize:   10 * 1024 * 1024, // 10MB
-		MaxBackups:    5,
+		MaxFileSize:   100 * 1024 * 1024, // 100MB
+		MaxBackups:    15,                 // 15 days
 		ConsoleOutput: true,
-	})
+		ConsoleColor:  true,
+		BatchSize:     10,
+		FlushInterval: 100, // 100ms
+	}))
 	if err != nil {
-		println("Failed to initialize logger:", err.Error())
+		logger.Fatal("Failed to initialize logger: %v", err)
 	}
 	defer logger.GetDefault().Close()
 
@@ -49,6 +52,6 @@ func main() {
 	})
 
 	if err != nil {
-		println("Error:", err.Error())
+		logger.Fatal("Error starting application: %v", err)
 	}
 }

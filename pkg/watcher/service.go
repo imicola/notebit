@@ -11,6 +11,7 @@ import (
 	"notebit/pkg/ai"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
+	"notebit/pkg/logger"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -153,7 +154,7 @@ func (s *Service) eventLoop() {
 			if s.logger != nil {
 				s.logger.Errorf("Watcher error: %v", err)
 			} else {
-				fmt.Printf("Watcher error: %v\n", err)
+				logger.Error("Watcher error: %v", err)
 			}
 
 		case <-s.done:
@@ -270,7 +271,7 @@ func (s *Service) handleWrite(path string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to read file %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to read file %s: %v\n", path, err)
+			logger.Error("Failed to read file %s: %v", path, err)
 		}
 		return
 	}
@@ -282,7 +283,7 @@ func (s *Service) handleWrite(path string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to check indexing status for %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to check indexing status for %s: %v\n", path, err)
+			logger.Error("Failed to check indexing status for %s: %v", path, err)
 		}
 		return
 	}
@@ -306,7 +307,7 @@ func (s *Service) handleRemove(path string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to delete file from index: %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to delete file from index: %s: %v\n", path, err)
+			logger.Error("Failed to delete file from index: %s: %v", path, err)
 		}
 	}
 }
@@ -331,7 +332,7 @@ func (s *Service) indexFileWithEmbeddings(path, content string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to stat file %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to stat file %s: %v\n", path, err)
+			logger.Error("Failed to stat file %s: %v", path, err)
 		}
 		return
 	}
@@ -342,7 +343,7 @@ func (s *Service) indexFileWithEmbeddings(path, content string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to process document %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to process document %s: %v\n", path, err)
+			logger.Error("Failed to process document %s: %v", path, err)
 		}
 		// Still try to index without embeddings
 		s.indexFileMetadataOnly(path, content, info.ModTime, info.Size)
@@ -370,7 +371,7 @@ func (s *Service) indexFileWithEmbeddings(path, content string) {
 		if s.logger != nil {
 			s.logger.Errorf("Failed to index file %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to index file %s: %v\n", path, err)
+			logger.Error("Failed to index file %s: %v", path, err)
 		}
 	}
 }
@@ -382,7 +383,7 @@ func (s *Service) indexFileMetadataOnly(path, content string, modTime int64, siz
 		if s.logger != nil {
 			s.logger.Errorf("Failed to index file metadata %s: %v", path, err)
 		} else {
-			fmt.Printf("Failed to index file metadata %s: %v\n", path, err)
+			logger.Error("Failed to index file metadata %s: %v", path, err)
 		}
 	}
 }

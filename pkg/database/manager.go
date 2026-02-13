@@ -5,9 +5,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"notebit/pkg/logger"
+
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Manager handles database operations
@@ -36,6 +38,9 @@ func GetInstance() *Manager {
 
 // Init initializes the database connection
 func (m *Manager) Init(basePath string) error {
+	timer := logger.StartTimer()
+	logger.InfoWithFields(nil, map[string]interface{}{"base_path": basePath}, "Initializing database")
+	
 	var err error
 	m.initOnce.Do(func() {
 		m.mu.Lock()
@@ -45,6 +50,10 @@ func (m *Manager) Init(basePath string) error {
 		// Create data directory if not exists
 		dataDir := filepath.Join(basePath, "data")
 		if err = os.MkdirAll(dataDir, 0755); err != nil {
+			logger.ErrorWithFields(nil, map[string]interface{}{
+				"data_dir": dataDir,
+				"error":    err.Error(),
+			}, "Failed to create data directory")
 			m.initErr = &DatabaseError{Op: "create_data_dir", Err: err}
 			return
 		}
@@ -55,18 +64,27 @@ func (m *Manager) Init(basePath string) error {
 
 		// Open SQLite connection using pure Go driver (no CGO)
 		m.db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Silent),
+			Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 		})
 		if err != nil {
+			logger.ErrorWithFields(nil, map[string]interface{}{
+				"db_path": dbPath,
+				"error":   err.Error(),
+			}, "Failed to open database")
 			m.initErr = &DatabaseError{Op: "open_database", Err: err}
 			return
 		}
 
 		// Run migrations
 		if err = m.AutoMigrate(); err != nil {
+			logger.ErrorWithFields(nil, map[string]interface{}{
+				"error": err.Error(),
+			}, "Failed to run database migrations")
 			m.initErr = &DatabaseError{Op: "migrate", Err: err}
 			return
 		}
+		
+		logger.InfoWithDuration(nil, timer(), "Database initialized successfully: %s", dbPath)
 	})
 
 	return m.initErr

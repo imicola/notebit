@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"notebit/pkg/config"
+	"notebit/pkg/logger"
 )
 
 // Service manages AI operations including embedding and chunking
@@ -37,6 +38,9 @@ func NewService(cfg *config.Config) *Service {
 
 // Initialize sets up the AI service with providers based on configuration
 func (s *Service) Initialize() error {
+	timer := logger.StartTimer()
+	logger.Info("Initializing AI service")
+	
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -51,6 +55,9 @@ func (s *Service) Initialize() error {
 		})
 		if err == nil {
 			s.providers["openai"] = provider
+			logger.Debug("OpenAI provider initialized")
+		} else {
+			logger.WarnWithFields(nil, map[string]interface{}{"error": err.Error()}, "Failed to initialize OpenAI provider")
 		}
 	}
 
@@ -63,6 +70,12 @@ func (s *Service) Initialize() error {
 	})
 	if err == nil {
 		s.providers["ollama"] = provider
+		logger.DebugWithFields(nil, map[string]interface{}{
+			"base_url": ollamaCfg.BaseURL,
+			"model":    ollamaCfg.EmbeddingModel,
+		}, "Ollama provider initialized")
+	} else {
+		logger.WarnWithFields(nil, map[string]interface{}{"error": err.Error()}, "Failed to initialize Ollama provider")
 	}
 
 	// Initialize chunkers
@@ -95,6 +108,7 @@ func (s *Service) Initialize() error {
 
 	// Validate that we have at least one provider
 	if len(s.providers) == 0 {
+		logger.Error("No embedding provider available")
 		return fmt.Errorf("no embedding provider available - please configure OpenAI or ensure Ollama is running")
 	}
 
@@ -106,6 +120,7 @@ func (s *Service) Initialize() error {
 		}
 	}
 
+	logger.InfoWithDuration(nil, timer(), "AI service initialized with %d providers", len(s.providers))
 	return nil
 }
 
