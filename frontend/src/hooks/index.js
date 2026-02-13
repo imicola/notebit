@@ -7,3 +7,4 @@ export { useToast } from './useToast';
 export { useFileOperations } from './useFileOperations';
 export { useResizable } from './useResizable';
 export { useKeyboardShortcuts } from './useKeyboardShortcuts';
+export { useAISettings } from './useAISettings';

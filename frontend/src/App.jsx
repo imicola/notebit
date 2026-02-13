@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { FolderOpen, X, Monitor, Save, Settings, Menu, Sparkles, MessageSquare, Network } from 'lucide-react';
-import { OpenFolder, ListFiles, ReadFile, SaveFile, SetFolder } from '../wailsjs/go/main/App';
+import { fileService } from './services/fileService';
 import FileTree from './components/FileTree';
 import Editor from './components/Editor';
 import ChatPanel from './components/ChatPanel';
@@ -11,230 +11,101 @@ import SettingsModal from './components/SettingsModal';
 import SimilarNotesSidebar from './components/SimilarNotesSidebar';
 import AIStatusIndicator from './components/AIStatusIndicator';
 import clsx from 'clsx';
-import { SIDEBAR, SEMANTIC_SEARCH } from './constants';
+import { SIDEBAR, SEMANTIC_SEARCH, STORAGE_KEYS } from './constants';
+import { useSettings, useToast, useResizable, useKeyboardShortcuts, useFileOperations } from './hooks';
 
 function App() {
-  const [fileTree, setFileTree] = useState(null);
-  const [currentFile, setCurrentFile] = useState(null);
-  const [currentContent, setCurrentContent] = useState('');
-  const [basePath, setBasePath] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  
+  // --- Hooks integration ---
+  const { settings, updateSetting } = useSettings();
+  const { toast, showToast, hideToast } = useToast();
+  const {
+    fileTree, currentFile, currentContent, basePath,
+    loading, error,
+    openFolder: baseOpenFolder, selectFile, saveFile: baseSaveFile,
+    updateContent, refreshFileTree, setFileTree, setError
+  } = useFileOperations({ onSuccess: (msg) => showToast(msg) });
+
+  const {
+    width: sidebarWidth,
+    isResizing,
+    startResizing,
+  } = useResizable({
+    defaultWidth: SIDEBAR.DEFAULT_WIDTH,
+    minWidth: SIDEBAR.MIN_WIDTH,
+    maxWidth: SIDEBAR.MAX_WIDTH,
+    persist: true,
+  });
+
+  const {
+    width: rightSidebarWidth,
+    isResizing: isResizingRight,
+    startResizing: startResizingRight,
+  } = useResizable({
+    defaultWidth: SEMANTIC_SEARCH.DEFAULT_WIDTH,
+    minWidth: SEMANTIC_SEARCH.MIN_WIDTH,
+    maxWidth: SEMANTIC_SEARCH.MAX_WIDTH,
+    persist: false,
+  });
+
   // UI State
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR.DEFAULT_WIDTH);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isResizing, setIsResizing] = useState(false);
   const [isZenMode, setIsZenMode] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [toast, setToast] = useState({ show: false, message: '' });
 
   // Right sidebar state
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(SEMANTIC_SEARCH.DEFAULT_WIDTH);
-  const [isResizingRight, setIsResizingRight] = useState(false);
-  const [searchTrigger, setSearchTrigger] = useState(0);  // Trigger for search on save
+  const [searchTrigger, setSearchTrigger] = useState(0);
 
   // View mode state
-  const [viewMode, setViewMode] = useState('editor'); // 'editor' | 'chat' | 'graph'
+  const [viewMode, setViewMode] = useState('editor');
 
-  // Settings State
-  const [appSettings, setAppSettings] = useState({
-    fontInterface: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-    fontText: '"Maple Mono NF CN", "SF Mono", "JetBrains Mono", "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
-  });
-
+  // Restore last opened folder on mount
   useEffect(() => {
-    // Load last opened folder
     const loadLastFolder = async () => {
       const lastFolder = localStorage.getItem('notebit-last-folder');
       if (lastFolder) {
         try {
-          await SetFolder(lastFolder);
-          setBasePath(lastFolder);
-          const tree = await ListFiles();
-          setFileTree(tree);
+          await fileService.setFolder(lastFolder);
+          await refreshFileTree();
         } catch (e) {
           console.error('Failed to restore folder', e);
         }
       }
     };
     loadLastFolder();
-
-    // Load settings from localStorage
-    const saved = localStorage.getItem('notebit-settings');
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            setAppSettings(prev => ({ ...prev, ...parsed }));
-            
-            // Apply fonts
-            if (parsed.fontInterface) document.documentElement.style.setProperty('--font-interface', parsed.fontInterface);
-            if (parsed.fontText) document.documentElement.style.setProperty('--font-text', parsed.fontText);
-        } catch (e) { console.error('Failed to load settings', e); }
-    }
   }, []);
 
-  const handleUpdateSettings = (key, value) => {
-      const newSettings = { ...appSettings, [key]: value };
-      setAppSettings(newSettings);
-      localStorage.setItem('notebit-settings', JSON.stringify(newSettings));
-      
-      // Apply CSS variable
-      if (key === 'fontInterface') {
-          document.documentElement.style.setProperty('--font-interface', value);
-      } else if (key === 'fontText') {
-          document.documentElement.style.setProperty('--font-text', value);
-      }
-  };
-
-  const showToast = (message) => {
-    setToast({ show: true, message });
-  };
-
-  const handleOpenFolder = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const path = await OpenFolder();
-      if (path) {
-        setBasePath(path);
-        localStorage.setItem('notebit-last-folder', path);
-        await refreshFileTree();
-      }
-    } catch (err) {
-      setError(err.message || 'Failed to open folder');
-      console.error('Error opening folder:', err);
-    } finally {
-      setLoading(false);
+  // Wrap openFolder to persist to localStorage
+  const handleOpenFolder = useCallback(async () => {
+    const path = await baseOpenFolder();
+    if (path) {
+      localStorage.setItem('notebit-last-folder', path);
     }
-  };
+  }, [baseOpenFolder]);
 
-  const refreshFileTree = async () => {
-    try {
-      const tree = await ListFiles();
-      setFileTree(tree);
-    } catch (err) {
-      setError(err.message || 'Failed to load files');
-      console.error('Error loading files:', err);
+  // Wrap saveFile to trigger similarity search
+  const handleSave = useCallback(async (content) => {
+    const result = await baseSaveFile(content);
+    if (result) {
+      setSearchTrigger(prev => prev + 1);
     }
-  };
+  }, [baseSaveFile]);
 
-  const handleFileSelect = async (node) => {
-    if (node.isDir) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await ReadFile(node.path);
-      setCurrentFile(node);
-      setCurrentContent(result.content);
-    } catch (err) {
-      setError(err.message || 'Failed to read file');
-      console.error('Error reading file:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSave = async (content) => {
-    if (!currentFile) return;
-
-    setLoading(true);
-    setError(null);
-    try {
-      await SaveFile(currentFile.path, content);
-      setCurrentContent(content);
-      setSearchTrigger(prev => prev + 1);  // Trigger similarity search
-      showToast('File saved successfully');
-    } catch (err) {
-      setError(err.message || 'Failed to save file');
-      console.error('Error saving file:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleContentChange = (content) => {
-    setCurrentContent(content);
-  };
-
-  // Sidebar Resizing Logic
-  const startResizing = useCallback(() => setIsResizing(true), []);
-  const stopResizing = useCallback(() => setIsResizing(false), []);
-  const resize = useCallback(
-    (e) => {
-      if (isResizing) {
-        setSidebarWidth(Math.max(SIDEBAR.MIN_WIDTH, Math.min(e.clientX, SIDEBAR.MAX_WIDTH)));
-      }
-    },
-    [isResizing]
-  );
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', resize);
-      window.addEventListener('mouseup', stopResizing);
-    }
-    return () => {
-      window.removeEventListener('mousemove', resize);
-      window.removeEventListener('mouseup', stopResizing);
-    };
-  }, [isResizing, resize, stopResizing]);
-
-  // Right Sidebar Resizing Logic
-  const startResizingRight = useCallback(() => setIsResizingRight(true), []);
-  const stopResizingRight = useCallback(() => setIsResizingRight(false), []);
-  const resizeRight = useCallback(
-    (e) => {
-      if (isResizingRight) {
-        const newWidth = window.innerWidth - e.clientX;
-        setRightSidebarWidth(Math.max(SEMANTIC_SEARCH.MIN_WIDTH, Math.min(newWidth, SEMANTIC_SEARCH.MAX_WIDTH)));
-      }
-    },
-    [isResizingRight]
-  );
-
-  useEffect(() => {
-    if (isResizingRight) {
-      window.addEventListener('mousemove', resizeRight);
-      window.addEventListener('mouseup', stopResizingRight);
-    }
-    return () => {
-      window.removeEventListener('mousemove', resizeRight);
-      window.removeEventListener('mouseup', stopResizingRight);
-    };
-  }, [isResizingRight, resizeRight, stopResizingRight]);
-
-  // Global Keyboard Shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // Toggle Zen Mode (F11)
-      if (e.key === 'F11') {
-        e.preventDefault();
-        setIsZenMode((prev) => !prev);
-      }
-      
-      // Toggle Command Palette (Cmd+K)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  // Keyboard shortcuts via hook
+  useKeyboardShortcuts({
+    'F11': () => setIsZenMode(prev => !prev),
+    'Mod+k': () => setIsCommandPaletteOpen(prev => !prev),
+  });
 
   // Handle open-file event from ChatPanel and GraphPanel
   useEffect(() => {
     const handleOpenFile = (e) => {
       const { path } = e.detail;
-      // Find the file in fileTree and select it
       const findAndSelectFile = (nodes) => {
         for (const node of nodes) {
           if (node.path === path && !node.isDir) {
-            handleFileSelect(node);
+            selectFile(node);
             return true;
           }
           if (node.children && findAndSelectFile(node.children)) {
@@ -243,61 +114,57 @@ function App() {
         }
         return false;
       };
-      findAndSelectFile(fileTree);
+      if (fileTree) findAndSelectFile(fileTree);
       setViewMode('editor');
     };
     window.addEventListener('open-file', handleOpenFile);
     return () => window.removeEventListener('open-file', handleOpenFile);
-  }, [fileTree]);
+  }, [fileTree, selectFile]);
 
   // Commands for Palette
-  const commands = [
+  const commands = useMemo(() => [
     {
-        id: 'toggle-zen-mode',
-        label: isZenMode ? 'Exit Zen Mode' : 'Enter Zen Mode',
-        shortcut: 'F11',
-        icon: Monitor,
-        action: () => setIsZenMode((prev) => !prev)
+      id: 'toggle-zen-mode',
+      label: isZenMode ? 'Exit Zen Mode' : 'Enter Zen Mode',
+      shortcut: 'F11',
+      icon: Monitor,
+      action: () => setIsZenMode(prev => !prev),
     },
     {
-        id: 'open-folder',
-        label: 'Open Folder',
-        icon: FolderOpen,
-        action: handleOpenFolder
+      id: 'open-folder',
+      label: 'Open Folder',
+      icon: FolderOpen,
+      action: handleOpenFolder,
     },
-    // Save command is tricky because it depends on editor state/content.
-    // Ideally, we trigger the save on the current file with current content.
-    // But currentContent in App state might be stale if Editor hasn't pushed up changes on every keystroke?
-    // Actually Editor pushes onChange, so currentContent should be up to date.
     {
-        id: 'save-file',
-        label: 'Save File',
-        shortcut: 'Cmd+S',
-        icon: Save,
-        action: () => handleSave(currentContent)
-    }
-  ];
+      id: 'save-file',
+      label: 'Save File',
+      shortcut: 'Cmd+S',
+      icon: Save,
+      action: () => handleSave(currentContent),
+    },
+  ], [isZenMode, handleOpenFolder, handleSave, currentContent]);
 
   return (
     <div className="flex flex-col h-screen bg-primary text-normal font-sans">
       <Toast 
         show={toast.show} 
         message={toast.message} 
-        onClose={() => setToast({ ...toast, show: false })} 
+        onClose={hideToast} 
       />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        settings={appSettings}
-        onUpdateSettings={handleUpdateSettings}
+        settings={settings}
+        onUpdateSettings={updateSetting}
       />
 
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
         setIsOpen={setIsCommandPaletteOpen}
         files={fileTree}
-        onFileSelect={handleFileSelect}
+        onFileSelect={selectFile}
         commands={commands}
       />
 
@@ -409,7 +276,7 @@ function App() {
           </div>
           <FileTree
             tree={fileTree}
-            onSelect={handleFileSelect}
+            onSelect={selectFile}
             selectedPath={currentFile?.path}
           />
         </aside>
@@ -440,7 +307,7 @@ function App() {
             {currentFile ? (
               <Editor
                 content={currentContent}
-                onChange={handleContentChange}
+                onChange={updateContent}
                 onSave={handleSave}
                 filename={currentFile.name}
                 isZenMode={isZenMode}
@@ -475,7 +342,7 @@ function App() {
             triggerSearch={searchTrigger}
             isOpen={isRightSidebarOpen && !isZenMode}
             onClose={() => setIsRightSidebarOpen(false)}
-            onNoteClick={(note) => handleFileSelect({ path: note.path, name: note.title })}
+            onNoteClick={(note) => selectFile({ path: note.path, name: note.title })}
             width={rightSidebarWidth}
           />
         )}

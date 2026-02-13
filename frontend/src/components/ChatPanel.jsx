@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Loader2, Sparkles } from 'lucide-react';
-import { RAGQuery } from '../../wailsjs/go/main/App';
-import { EventsOn } from '../../wailsjs/runtime/runtime';
+import { ragService } from '../services/ragService';
 import clsx from 'clsx';
 
 export default function ChatPanel() {
@@ -23,7 +22,7 @@ export default function ChatPanel() {
 
 	// Listen for streaming chunks
 	useEffect(() => {
-		const cleanup = EventsOn('rag_chunk', (data) => {
+		const cleanup = ragService.onChunk((data) => {
 			const { messageId, content } = data;
 			setStreamingStates(prev => ({ ...prev, [messageId]: true }));
 
@@ -83,7 +82,7 @@ export default function ChatPanel() {
 		setLoading(true);
 
 		try {
-			const response = await RAGQuery(trimmed);
+			const response = await ragService.query(trimmed);
 
 			// Find the assistant message and update it
 			setMessages(prev => {

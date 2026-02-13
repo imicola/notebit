@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { GetSimilarityStatus } from '../../wailsjs/go/main/App';
+import { similarityService } from '../services/similarityService';
 import clsx from 'clsx';
 
 const AIStatusIndicator = ({ className, showLabel = false }) => {
@@ -10,7 +10,7 @@ const AIStatusIndicator = ({ className, showLabel = false }) => {
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const result = await GetSimilarityStatus();
+        const result = await similarityService.getStatus();
         setStatus(result);
       } catch (err) {
         setStatus({ available: false });

@@ -1,44 +1,56 @@
 # Module Layer Analysis Report
-**Last Updated**: 2026-02-12
+**Last Updated**: 2026-02-13
 
 ## Analysis Coverage
-| Module | Analysis Status | Problem Count | Location |
-|--------|-----------------|---------------|----------|
-| App.jsx | ✅ Complete | 4 (Major) | Main Entry Point |
-| Editor.jsx | ✅ Complete | 0 | components/Editor.jsx |
-| Hooks | ✅ Complete | 0 | hooks/*.js |
+| Feature/Module | Analysis Status | Problem Count | Report Scope |
+|----------------|-----------------|---------------|--------------|
+| Frontend App Shell (`App.jsx`) | ✅ Complete | 8 | orchestration, state, API boundary |
+| Frontend AI Panels (`ChatPanel`, `GraphPanel`, `SimilarNotesSidebar`) | ✅ Complete | 6 | Wails coupling, event flow, error pattern |
+| Frontend Settings (`AISettings`, `SettingsModal`, hooks) | ✅ Complete | 6 | decomposition, consistency |
+| Backend Binding (`app.go`) | ✅ Complete | 5 | oversized orchestration |
+| Backend Infrastructure (`pkg/database`, `pkg/logger`) | ✅ Complete | 4 | context safety, contract hygiene |
 
 ## Problem Summary
 
-### 1. The "God Object" Problem (App.jsx)
-`App.jsx` currently orchestrates all state management, file operations, and settings logic directly. This violates the Single Responsibility Principle and ignores the newly created hooks.
+### Resources Not Reused (P1)
+| Module | Problem | Location | Should Use |
+|--------|---------|----------|------------|
+| App shell | Existing hooks not consumed | `frontend/src/App.jsx` | `useFileOperations`, `useSettings`, `useToast`, `useResizable`, `useKeyboardShortcuts` |
+| AI panels | Direct Wails API in UI | `ChatPanel.jsx`, `GraphPanel.jsx`, `SimilarNotesSidebar.jsx` | `services/*` adapters |
 
-| Logic | Current Implementation | Target Implementation |
-|-------|------------------------|-----------------------|
-| File State | `useState` in App | `useFileOperations` hook |
-| File Actions | Direct Wails calls | `fileService` via hook |
-| Settings | `useState` + `useEffect` | `useSettings` hook |
-| Toast | `useState` | `useToast` hook |
-| Resizing | Inline event handlers | `useResizable` hook |
+### Duplicate Implementations (P1)
+| Functionality | Duplicate Locations | Suggestion |
+|---------------|---------------------|------------|
+| File open/save flow | `App.jsx` + `useFileOperations.js` | Keep hook as single path; remove App-local copies |
+| Settings persistence + CSS var apply | `App.jsx` + `useSettings.js` | Keep `useSettings` only |
+| Resize event binding | `App.jsx` + `useResizable.js` | Keep hook-only listener management |
 
-### 2. Orphaned Artifacts
-The following files exist but are not imported or used by the main application:
-- `hooks/useFileOperations.js`
-- `hooks/useSettings.js`
-- `hooks/useToast.js`
-- `hooks/useResizable.js`
-- `hooks/useKeyboardShortcuts.js` (Check usage)
+### Inconsistent Patterns (P2)
+| Module | Problem | Current | Should Unify To |
+|--------|---------|---------|-----------------|
+| Frontend API calls | Invocation style inconsistent | direct Wails import in components | service adapter pattern |
+| Error reporting | Mixed `console.error` usage | ad-hoc per component | centralized error/toast + logger bridge |
+| Cross-component open-file event | custom window event | `window.dispatchEvent` + global listener | typed event utility or shared state/action |
 
-### 3. Duplicate Logic
-- `App.jsx` implements `handleOpenFolder` vs `useFileOperations.openFolder`
-- `App.jsx` implements `handleSave` vs `useFileOperations.saveFile`
-- `App.jsx` implements settings loading vs `useSettings` initialization
+### Code Quality Findings (P2/P3)
+| Finding | Location | Severity | Note |
+|--------|----------|----------|------|
+| Logger called with `nil` context | `pkg/database/manager.go` | High | flagged by diagnostics |
+| Oversized file | `app.go` (786 LoC) | Medium | split by domain use-cases |
+| Oversized component | `AISettings.jsx` (647 LoC) | Medium | split tabs/panels and hooks |
+| Empty structural directories | `frontend/src/components/*` subdirs | Low | cleanup or materialize structure |
 
-## Module Layer Refactoring Tasks (Integration Phase)
+## Module Layer Refactoring Tasks
+1. **[M-101] App Hook Integration**: migrate App shell to existing hooks and remove duplicate logic.
+2. **[M-102] Frontend AI Service Adapters**: create service modules for RAG/similarity/graph and migrate components.
+3. **[M-103] App Event Flow Refactor**: replace global `open-file` custom event with explicit shared action path.
+4. **[M-104] AISettings Decomposition**: split large settings component into presentational sections + hook.
+5. **[M-105] Backend App Decomposition**: split `app.go` methods by domain coordinator.
+6. **[M-106] Logger Context Compliance**: enforce non-nil context in database and nearby modules.
+7. **[M-107] Cleanup Pass**: remove empty/temporary directories and dead imports after refactor.
 
-1. **[M-030] Integrate useToast**: Replace App toast state with `useToast`.
-2. **[M-031] Integrate useSettings**: Replace App settings logic with `useSettings`.
-3. **[M-032] Integrate useFileOperations**: Replace App file logic with `useFileOperations`.
-4. **[M-033] Integrate useResizable**: Replace App resize logic with `useResizable`.
-5. **[M-034] Integrate useKeyboardShortcuts**: Clean up App keyboard listeners.
-6. **[M-035] Cleanup App.jsx**: Remove unused imports and state after integration.
+## Suggested Execution Priority
+- **P0 (Safety)**: `M-106`
+- **P1 (Boundary & Duplication)**: `M-101`, `M-102`
+- **P2 (Scalability)**: `M-105`, `M-104`, `M-103`
+- **P3 (Hygiene)**: `M-107`

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, AlertCircle, FileText, Loader2 } from 'lucide-react';
-import { FindSimilar, GetSimilarityStatus } from '../../wailsjs/go/main/App';
+import { similarityService } from '../services/similarityService';
 import clsx from 'clsx';
 import { SEMANTIC_SEARCH } from '../constants';
 
@@ -34,7 +34,7 @@ const SimilarNotesSidebar = ({
 
   const checkStatus = async () => {
     try {
-      const result = await GetSimilarityStatus();
+      const result = await similarityService.getStatus();
       setStatus(result);
     } catch (err) {
       console.error('Failed to check status:', err);
@@ -59,7 +59,7 @@ const SimilarNotesSidebar = ({
       setLoading(true);
       setError(null);
 
-      FindSimilar(trimmedQuery, SEMANTIC_SEARCH.DEFAULT_LIMIT)
+      similarityService.findSimilar(trimmedQuery, SEMANTIC_SEARCH.DEFAULT_LIMIT)
         .then((results) => {
           if (!mountedRef.current || requestIdRef.current !== currentRequestId) {
             return;

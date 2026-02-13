@@ -10,7 +10,8 @@ import {
   CreateFile,
   DeleteFile,
   RenameFile,
-  GetBasePath
+  GetBasePath,
+  SetFolder
 } from '../../wailsjs/go/main/App';
 
 /**
@@ -46,6 +47,14 @@ export const fileService = {
    */
   async openFolder() {
     return wrapCall('openFolder', OpenFolder);
+  },
+
+  /**
+   * Set the working folder path
+   * @param {string} path - Folder path to set
+   */
+  async setFolder(path) {
+    return wrapCall('setFolder', () => SetFolder(path));
   },
 
   /**

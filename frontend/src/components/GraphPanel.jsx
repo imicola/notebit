@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Network } from 'vis-network/standalone';
 import { Loader2, AlertCircle, Globe } from 'lucide-react';
-import { GetGraphData } from '../../wailsjs/go/main/App';
+import { graphService } from '../services/graphService';
 
 export default function GraphPanel() {
 	const [graphData, setGraphData] = useState({ nodes: [], links: [] });
@@ -18,8 +18,7 @@ export default function GraphPanel() {
 		setLoading(true);
 		setError(null);
 		try {
-			const data = await GetGraphData();
-			console.log('Graph data loaded:', data);
+			const data = await graphService.getGraphData();
 			setGraphData(data);
 		} catch (err) {
 			console.error('Failed to load graph:', err);

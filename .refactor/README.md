@@ -1,19 +1,19 @@
-# Notebit Refactoring Project
+# Notebit Refactoring Workspace
 
 ## Status Overview
-- **Project**: Notebit - Local-First Markdown Note-taking App
+- **Project**: Notebit (Wails + Go + React)
 - **Current Phase**: Phase 5 - Verification (All Tasks Completed)
 - **Progress**: 100%
 - **Last Updated**: 2026-02-12
 
-## Project Summary
-Notebit is a Wails (Go) + React application combining:
-- **Backend**: Go 1.23 + Wails v2.11 (file system operations)
-- **Frontend**: React 18.2 + Vite + Tailwind CSS (editor UI)
-- **Editor**: CodeMirror 6 (Markdown editing with live preview)
+## Completed Tasks
 
-## Refactoring Summary
+### A-101: Logger Context Safety ✅
+- Fixed `nil` context args → `context.TODO()` in `pkg/database/manager.go`
 
+### A-102: Frontend Service Adapters ✅
+- Created 4 service modules: `aiService.js`, `ragService.js`, `graphService.js`, `similarityService.js`
+- Migrated 6 components away from direct Wails imports
 ### Completed
 - ✅ Architecture layer: Service abstraction, utilities, constants
 - ✅ Module layer: Custom hooks, dead code removal, performance fixes
@@ -23,10 +23,10 @@ Notebit is a Wails (Go) + React application combining:
 
 ### Pending (Optional)
 - None! All planned tasks completed.
-
+  - `app_files.go` (~320 lines) — file ops, indexing, DB API
 ## Directory Structure (After Refactoring)
-```
-frontend/src/
+  - `app_search.go` (~110 lines) — search, RAG, graph
+
 ├── App.jsx              # Main application component
 ├── main.jsx             # React entry point
 ├── style.css            # Global styles + Tailwind
@@ -49,9 +49,9 @@ frontend/src/
 │   └── asyncHandler.js
 └── constants/           # NEW: Application constants
     └── index.js
-```
+- Verified all components use service adapters (0 direct Wails imports)
 
-## Analysis Files
+## Verification
 - [Phase 0: Project Partition](analysis/project-partition.md) - ✅ Complete
 - [Phase 1: Key Identification](analysis/key-identification.md) - ✅ Complete
 - [Phase 2: Architecture Report](analysis/architecture-report.md) - ✅ Complete
@@ -59,15 +59,22 @@ frontend/src/
 - [Module: App.jsx](analysis/modules/app-module.md)
 - [Module: Editor.jsx](analysis/modules/editor-module.md)
 - [Module: Other Components](analysis/modules/other-modules.md)
-
-## Task Tracking
+## Analysis Files
+- `analysis/project-partition.md`
 - [Master Plan](tasks/master-plan.md) - 100% Complete
 
 ## Session Logs
 - [2026-02-11](logs/session-2026-02-11.md) - Initial refactoring session
-
-## Quick Recovery
+- `analysis/architecture-report.md`
+- `analysis/module-report.md`
 When continuing refactoring, read this file first, then:
 1. Read `tasks/master-plan.md` for current progress
 2. Read pending tasks in Phase 5 section
 3. Check latest session log in `logs/`
+- Active plan: `tasks/master-plan.md`
+- Session log: `logs/session-2026-02-13.md`
+
+## Quick Resume
+1. Read `tasks/master-plan.md`
+2. Start from **A-101** (logger context safety) and **A-102** (frontend API boundary)
+3. Update progress and session log after each task
