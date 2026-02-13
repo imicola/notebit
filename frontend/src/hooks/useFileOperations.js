@@ -61,11 +61,16 @@ export const useFileOperations = (options = {}) => {
   // Select and load file
   const selectFile = useCallback(
     createHandler(
-      async (node) => {
-        if (node.isDir) return null;
-        const result = await fileService.readFile(node.path);
-        setCurrentFile(node);
-        setCurrentContent(result.content);
+      async (nodeOrPath) => {
+        if (!nodeOrPath) return null;
+        const isObject = typeof nodeOrPath === 'object';
+        if (isObject && nodeOrPath.isDir) return null;
+        const path = isObject ? nodeOrPath.path : nodeOrPath;
+        if (!path) return null;
+        const result = await fileService.readFile(path);
+        const name = isObject && nodeOrPath.name ? nodeOrPath.name : path.split('/').pop();
+        setCurrentFile({ ...(isObject ? nodeOrPath : {}), path, name, isDir: false });
+        setCurrentContent(typeof result?.content === 'string' ? result.content : '');
         return result;
       },
       ERROR_MESSAGES.READ_FILE

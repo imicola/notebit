@@ -251,7 +251,18 @@ func (a *App) indexFileWithEmbeddings(path, content string, modTime, size int64)
 			"path":  path,
 			"error": err.Error(),
 		}, "Embedding processing failed, fallback to metadata-only index")
-		return repo.IndexFile(path, content, modTime, size)
+		bareChunks, chunkErr := a.ai.ChunkText(content)
+		if chunkErr != nil {
+			return repo.IndexFile(path, content, modTime, size)
+		}
+		dbChunks := make([]database.ChunkInput, len(bareChunks))
+		for i, chunk := range bareChunks {
+			dbChunks[i] = database.ChunkInput{
+				Content: chunk.Content,
+				Heading: chunk.Heading,
+			}
+		}
+		return repo.IndexFileWithChunks(path, content, modTime, size, dbChunks)
 	}
 
 	dbChunks := make([]database.ChunkInput, len(chunks))

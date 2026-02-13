@@ -20,7 +20,6 @@ type Manager struct {
 	basePath string
 	repo     *Repository
 	mu       sync.RWMutex
-	initOnce sync.Once
 	initErr  error
 }
 
@@ -42,53 +41,74 @@ func (m *Manager) Init(basePath string) error {
 	timer := logger.StartTimer()
 	logger.InfoWithFields(context.TODO(), map[string]interface{}{"base_path": basePath}, "Initializing database")
 
-	var err error
-	m.initOnce.Do(func() {
-		m.mu.Lock()
-		m.basePath = basePath
+	m.mu.Lock()
+	sameBase := m.basePath == basePath && basePath != ""
+	if sameBase && m.db != nil && m.initErr == nil {
 		m.mu.Unlock()
-
-		// Create data directory if not exists
-		dataDir := filepath.Join(basePath, "data")
-		if err = os.MkdirAll(dataDir, 0755); err != nil {
-			logger.ErrorWithFields(context.TODO(), map[string]interface{}{
-				"data_dir": dataDir,
-				"error":    err.Error(),
-			}, "Failed to create data directory")
-			m.initErr = &DatabaseError{Op: "create_data_dir", Err: err}
-			return
+		return nil
+	}
+	if m.db != nil {
+		if sqlDB, err := m.db.DB(); err == nil {
+			_ = sqlDB.Close()
 		}
+	}
+	m.db = nil
+	m.dbPath = ""
+	m.basePath = basePath
+	m.repo = nil
+	m.initErr = nil
+	m.mu.Unlock()
 
-		// Set database path
-		dbPath := filepath.Join(dataDir, "notebit.sqlite")
-		m.dbPath = dbPath
+	dataDir := filepath.Join(basePath, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
+			"data_dir": dataDir,
+			"error":    err.Error(),
+		}, "Failed to create data directory")
+		m.mu.Lock()
+		m.initErr = &DatabaseError{Op: "create_data_dir", Err: err}
+		m.mu.Unlock()
+		return m.initErr
+	}
 
-		// Open SQLite connection using pure Go driver (no CGO)
-		m.db, err = gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-			Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-		})
-		if err != nil {
-			logger.ErrorWithFields(context.TODO(), map[string]interface{}{
-				"db_path": dbPath,
-				"error":   err.Error(),
-			}, "Failed to open database")
-			m.initErr = &DatabaseError{Op: "open_database", Err: err}
-			return
-		}
-
-		// Run migrations
-		if err = m.AutoMigrate(); err != nil {
-			logger.ErrorWithFields(context.TODO(), map[string]interface{}{
-				"error": err.Error(),
-			}, "Failed to run database migrations")
-			m.initErr = &DatabaseError{Op: "migrate", Err: err}
-			return
-		}
-
-		logger.InfoWithDuration(context.TODO(), timer(), "Database initialized successfully: %s", dbPath)
+	dbPath := filepath.Join(dataDir, "notebit.sqlite")
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
+	if err != nil {
+		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
+			"db_path": dbPath,
+			"error":   err.Error(),
+		}, "Failed to open database")
+		m.mu.Lock()
+		m.initErr = &DatabaseError{Op: "open_database", Err: err}
+		m.mu.Unlock()
+		return m.initErr
+	}
 
-	return m.initErr
+	if err := db.AutoMigrate(&File{}, &Chunk{}, &Tag{}, &FileTag{}); err != nil {
+		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
+			"error": err.Error(),
+		}, "Failed to run database migrations")
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+		m.mu.Lock()
+		m.initErr = &DatabaseError{Op: "migrate", Err: err}
+		m.mu.Unlock()
+		return m.initErr
+	}
+
+	m.mu.Lock()
+	m.db = db
+	m.dbPath = dbPath
+	m.basePath = basePath
+	m.repo = nil
+	m.initErr = nil
+	m.mu.Unlock()
+
+	logger.InfoWithDuration(context.TODO(), timer(), "Database initialized successfully: %s", dbPath)
+	return nil
 }
 
 // Close closes the database connection

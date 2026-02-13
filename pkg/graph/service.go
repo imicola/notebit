@@ -15,9 +15,12 @@ var tagRegex = regexp.MustCompile(`#([\w\p{L}-]+)`)
 
 // Service handles knowledge graph operations
 type Service struct {
-	mu  sync.RWMutex
-	db  *database.Manager
-	cfg *config.Config
+	mu             sync.RWMutex
+	db             *database.Manager
+	cfg            *config.Config
+	cachedGraph    *GraphData
+	cachedRevision uint64
+	cachedConfig   config.GraphConfig
 }
 
 // Node represents a node in the knowledge graph
@@ -54,8 +57,8 @@ func NewService(db *database.Manager, cfg *config.Config) *Service {
 
 // BuildGraph constructs the knowledge graph
 func (s *Service) BuildGraph() (*GraphData, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if !s.db.IsInitialized() {
 		return &GraphData{Nodes: []Node{}, Links: []Link{}}, nil
@@ -63,9 +66,13 @@ func (s *Service) BuildGraph() (*GraphData, error) {
 
 	repo := s.db.Repository()
 	graphConfig := s.cfg.GetGraphConfig()
+	revision := repo.GetRevision()
+	if s.cachedGraph != nil && s.cachedRevision == revision && s.cachedConfig == graphConfig {
+		return s.cachedGraph, nil
+	}
 
 	// Get all files with embeddings
-	files, err := repo.ListFiles()
+	files, err := repo.ListFilesWithChunks()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list files: %w", err)
 	}
@@ -109,10 +116,14 @@ func (s *Service) BuildGraph() (*GraphData, error) {
 		}
 	}
 
-	return &GraphData{
+	data := &GraphData{
 		Nodes: nodes,
 		Links: links,
-	}, nil
+	}
+	s.cachedGraph = data
+	s.cachedRevision = revision
+	s.cachedConfig = graphConfig
+	return data, nil
 }
 
 // buildNodes creates nodes from files
@@ -161,27 +172,41 @@ func (s *Service) extractTagLinks(files []database.File) []Link {
 	for _, file := range files {
 		seenTags := make(map[string]bool)
 		for _, chunk := range file.Chunks {
-			matches := tagRegex.FindAllStringSubmatch(chunk.Content, -1)
-
-			for _, match := range matches {
-				if len(match) < 2 {
+			lines := strings.Split(chunk.Content, "\n")
+			for _, line := range lines {
+				matches := tagRegex.FindAllStringSubmatchIndex(line, -1)
+				if len(matches) == 0 {
 					continue
 				}
 
-				tagName := match[1]
-				if seenTags[tagName] {
-					continue
-				}
-				seenTags[tagName] = true
+				trimmedLine := strings.TrimLeft(line, " \t")
+				leading := len(line) - len(trimmedLine)
 
-				link := Link{
-					Source:   generateNodeID("file", file.Path),
-					Target:   generateNodeID("tag", tagName), // Helper handles prefix? No, generateNodeID does.
-					Type:     "tag",
-					Strength: 1.0,
-				}
+				for _, match := range matches {
+					if len(match) < 4 {
+						continue
+					}
 
-				links = append(links, link)
+					tagStart := match[0]
+					if tagStart == leading {
+						continue
+					}
+
+					tagName := line[match[2]:match[3]]
+					if seenTags[tagName] {
+						continue
+					}
+					seenTags[tagName] = true
+
+					link := Link{
+						Source:   generateNodeID("file", file.Path),
+						Target:   generateNodeID("tag", tagName),
+						Type:     "tag",
+						Strength: 1.0,
+					}
+
+					links = append(links, link)
+				}
 			}
 		}
 	}
@@ -208,6 +233,16 @@ func (s *Service) extractWikiLinks(files []database.File) []Link {
 				}
 
 				targetName := match[1]
+				if idx := strings.Index(targetName, "|"); idx >= 0 {
+					targetName = targetName[:idx]
+				}
+				if idx := strings.Index(targetName, "#"); idx >= 0 {
+					targetName = targetName[:idx]
+				}
+				targetName = strings.TrimSpace(targetName)
+				if targetName == "" {
+					continue
+				}
 				// Try to find matching file by title or path
 				for _, targetFile := range files {
 					if s.filesMatch(targetName, &targetFile) {

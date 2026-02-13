@@ -345,8 +345,26 @@ func (s *Service) indexFileWithEmbeddings(path, content string) {
 		} else {
 			logger.Error("Failed to process document %s: %v", path, err)
 		}
-		// Still try to index without embeddings
-		s.indexFileMetadataOnly(path, content, info.ModTime, info.Size)
+		bareChunks, chunkErr := s.ai.ChunkText(content)
+		if chunkErr != nil {
+			s.indexFileMetadataOnly(path, content, info.ModTime, info.Size)
+			return
+		}
+		dbChunks := make([]database.ChunkInput, len(bareChunks))
+		for i, chunk := range bareChunks {
+			dbChunks[i] = database.ChunkInput{
+				Content: chunk.Content,
+				Heading: chunk.Heading,
+			}
+		}
+		repo := s.dbm.Repository()
+		if err := repo.IndexFileWithChunks(path, content, info.ModTime, info.Size, dbChunks); err != nil {
+			if s.logger != nil {
+				s.logger.Errorf("Failed to index file %s: %v", path, err)
+			} else {
+				logger.Error("Failed to index file %s: %v", path, err)
+			}
+		}
 		return
 	}
 

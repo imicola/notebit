@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"gorm.io/gorm"
 )
@@ -18,6 +19,7 @@ type Repository struct {
 	vectorCacheLoaded bool
 	vectorCacheMu     sync.RWMutex
 	vectorEngine      VectorSearchEngine
+	revision          atomic.Uint64
 }
 
 // NewRepository creates a new repository
@@ -60,6 +62,9 @@ func (r *Repository) IndexFile(path, content string, lastModified int64, fileSiz
 
 	// Use FirstOrCreate to handle updates
 	result := r.db.Where("path = ?", path).Assign(file).FirstOrCreate(&file)
+	if result.Error == nil {
+		r.revision.Add(1)
+	}
 	return result.Error
 }
 
@@ -80,18 +85,29 @@ func (r *Repository) ListFiles() ([]File, error) {
 	return files, err
 }
 
+func (r *Repository) ListFilesWithChunks() ([]File, error) {
+	var files []File
+	err := r.db.Preload("Chunks").Find(&files).Error
+	return files, err
+}
+
 // DeleteFile removes a file from the index (cascade deletes chunks)
 func (r *Repository) DeleteFile(path string) error {
 	err := r.db.Where("path = ?", path).Delete(&File{}).Error
 	if err == nil {
 		r.invalidateVectorCache()
+		r.revision.Add(1)
 	}
 	return err
 }
 
 // RenameFile updates a file's path in the index
 func (r *Repository) RenameFile(oldPath, newPath string) error {
-	return r.db.Model(&File{}).Where("path = ?", oldPath).Update("path", newPath).Error
+	err := r.db.Model(&File{}).Where("path = ?", oldPath).Update("path", newPath).Error
+	if err == nil {
+		r.revision.Add(1)
+	}
+	return err
 }
 
 // FileNeedsIndexing checks if a file needs to be re-indexed based on content hash
@@ -159,6 +175,7 @@ func (r *Repository) CreateChunks(fileID uint, chunks []Chunk) error {
 		}
 	}
 	r.invalidateVectorCache()
+	r.revision.Add(1)
 	return nil
 }
 
@@ -184,6 +201,7 @@ func (r *Repository) DeleteChunksForFile(fileID uint) error {
 	err := r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error
 	if err == nil {
 		r.invalidateVectorCache()
+		r.revision.Add(1)
 	}
 	return err
 }
@@ -366,5 +384,10 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 		return err
 	}
 	r.invalidateVectorCache()
+	r.revision.Add(1)
 	return nil
+}
+
+func (r *Repository) GetRevision() uint64 {
+	return r.revision.Load()
 }
