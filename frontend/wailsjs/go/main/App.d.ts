@@ -80,7 +80,7 @@ export function SetFolder(arg1:string):Promise<void>;
 
 export function SetGraphConfig(arg1:number,arg2:number,arg3:boolean):Promise<void>;
 
-export function SetLLMConfig(arg1:string,arg2:string,arg3:number,arg4:number):Promise<void>;
+export function SetLLMConfig(arg1:string,arg2:string,arg3:number,arg4:number,arg5:string,arg6:string,arg7:string):Promise<void>;
 
 export function SetOllamaConfig(arg1:string,arg2:string,arg3:number):Promise<void>;
 

@@ -15,15 +15,17 @@ type OpenAIProvider struct {
 	apiKey       string
 	baseURL      string
 	organization string
+	model        string
 	httpClient   *http.Client
 }
 
 // OpenAIConfig holds the configuration for OpenAI provider
 type OpenAIConfig struct {
-	APIKey       string
-	BaseURL      string
-	Organization string
-	Timeout      time.Duration
+	APIKey         string
+	BaseURL        string
+	Organization   string
+	Timeout        time.Duration
+	EmbeddingModel string
 }
 
 // NewOpenAIProvider creates a new OpenAI embedding provider
@@ -45,10 +47,16 @@ func NewOpenAIProvider(cfg OpenAIConfig) (*OpenAIProvider, error) {
 		timeout = 30 * time.Second
 	}
 
+	model := cfg.EmbeddingModel
+	if model == "" {
+		model = "text-embedding-3-small"
+	}
+
 	return &OpenAIProvider{
 		apiKey:       cfg.APIKey,
 		baseURL:      baseURL,
 		organization: cfg.Organization,
+		model:        model,
 		httpClient: &http.Client{
 			Timeout: timeout,
 		},
@@ -278,6 +286,9 @@ func (p *OpenAIProvider) GetModelDimension(model string) (int, error) {
 
 // GetDefaultModel returns the default model name
 func (p *OpenAIProvider) GetDefaultModel() string {
+	if p.model != "" {
+		return p.model
+	}
 	return "text-embedding-3-small"
 }
 

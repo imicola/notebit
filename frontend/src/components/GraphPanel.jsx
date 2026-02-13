@@ -8,6 +8,7 @@ export default function GraphPanel() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState(null);
 	const networkRef = useRef(null);
+	const containerRef = useRef(null);
 
 	useEffect(() => {
 		loadGraph();
@@ -18,6 +19,7 @@ export default function GraphPanel() {
 		setError(null);
 		try {
 			const data = await GetGraphData();
+			console.log('Graph data loaded:', data);
 			setGraphData(data);
 		} catch (err) {
 			console.error('Failed to load graph:', err);
@@ -28,7 +30,7 @@ export default function GraphPanel() {
 	};
 
 	useEffect(() => {
-		if (!loading && !error && graphData.nodes.length > 0 && !networkRef.current) {
+		if (!loading && !error && graphData.nodes.length > 0 && !networkRef.current && containerRef.current) {
 			// Convert to vis-network format
 			const nodes = graphData.nodes.map(node => ({
 				id: node.id,
@@ -64,8 +66,7 @@ export default function GraphPanel() {
 				width: link.strength * 3,
 			}));
 
-			const container = document.getElementById('network-container');
-			if (container) {
+			if (containerRef.current) {
 				const data = { nodes, edges: links };
 				const options = {
 					nodes: {
@@ -89,8 +90,17 @@ export default function GraphPanel() {
 						tooltipDelay: 200,
 					},
 				};
-				networkRef.current = new Network(container, data, options);
-				networkRef.current.fit();
+				networkRef.current = new Network(containerRef.current, data, options);
+					
+					// Force a redraw after a short delay to ensure correct sizing
+					setTimeout(() => {
+						if (networkRef.current) {
+							networkRef.current.fit();
+							networkRef.current.redraw();
+						}
+					}, 100);
+
+					networkRef.current.fit();
 
 				// Add node click handler
 				networkRef.current.on('click', (params) => {
@@ -107,7 +117,7 @@ export default function GraphPanel() {
 				});
 			}
 		}
-	}, [graphData, loading, error, networkRef]);
+	}, [graphData, loading, error]); // Removed networkRef from deps as it's a ref
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -179,8 +189,9 @@ export default function GraphPanel() {
 
 			{/* Network Container */}
 			<div
-				id="network-container"
-				className="flex-1 bg-primary"
+				ref={containerRef}
+				className="flex-1 bg-primary min-h-[400px]"
+				style={{ height: '100%', width: '100%' }}
 			/>
 		</div>
 	);

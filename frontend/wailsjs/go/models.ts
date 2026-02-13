@@ -40,24 +40,6 @@ export namespace config {
 	        this.show_implicit_links = source["show_implicit_links"];
 	    }
 	}
-	export class LLMConfig {
-	    provider: string;
-	    model: string;
-	    temperature: number;
-	    max_tokens: number;
-	
-	    static createFrom(source: any = {}) {
-	        return new LLMConfig(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.provider = source["provider"];
-	        this.model = source["model"];
-	        this.temperature = source["temperature"];
-	        this.max_tokens = source["max_tokens"];
-	    }
-	}
 	export class OllamaConfig {
 	    base_url: string;
 	    embedding_model: string;
@@ -92,6 +74,48 @@ export namespace config {
 	        this.embedding_model = source["embedding_model"];
 	    }
 	}
+	export class LLMConfig {
+	    provider: string;
+	    model: string;
+	    temperature: number;
+	    max_tokens: number;
+	    openai: OpenAIConfig;
+	    ollama: OllamaConfig;
+	
+	    static createFrom(source: any = {}) {
+	        return new LLMConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.provider = source["provider"];
+	        this.model = source["model"];
+	        this.temperature = source["temperature"];
+	        this.max_tokens = source["max_tokens"];
+	        this.openai = this.convertValues(source["openai"], OpenAIConfig);
+	        this.ollama = this.convertValues(source["ollama"], OllamaConfig);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class RAGConfig {
 	    max_context_chunks: number;
 	    temperature: number;

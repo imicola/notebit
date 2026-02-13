@@ -20,16 +20,16 @@ import (
 
 // App struct
 type App struct {
-	ctx     context.Context
-	fm      *files.Manager
-	dbm     *database.Manager
-	ai      *ai.Service
-	ks      *knowledge.Service
-	cfg     *config.Config
-	watcher  *watcher.Service
-	rag      *rag.Service
-	graph    *graph.Service
-	llm      ai.LLMProvider
+	ctx        context.Context
+	fm         *files.Manager
+	dbm        *database.Manager
+	ai         *ai.Service
+	ks         *knowledge.Service
+	cfg        *config.Config
+	watcher    *watcher.Service
+	rag        *rag.Service
+	graph      *graph.Service
+	llm        ai.LLMProvider
 	indexQueue chan indexJob
 }
 
@@ -117,7 +117,30 @@ func (a *App) initializeLLM() {
 	}
 
 	if llmConfig.Provider == "openai" {
-		openAIConfig := a.cfg.GetOpenAIConfig()
+		// Start with dedicated LLM OpenAI config
+		openAIConfig := llmConfig.OpenAI
+		
+		// Fallback to global AI config if API Key is missing
+		// This maintains backward compatibility and ease of use
+		globalOpenAI := a.cfg.GetOpenAIConfig()
+		
+		if openAIConfig.APIKey == "" {
+			openAIConfig.APIKey = globalOpenAI.APIKey
+		}
+		
+		// Use global BaseURL if local is empty, or default
+		if openAIConfig.BaseURL == "" {
+			if globalOpenAI.BaseURL != "" {
+				openAIConfig.BaseURL = globalOpenAI.BaseURL
+			} else {
+				openAIConfig.BaseURL = "https://api.openai.com/v1"
+			}
+		}
+		
+		if openAIConfig.Organization == "" {
+			openAIConfig.Organization = globalOpenAI.Organization
+		}
+
 		llm, err := ai.NewOpenAILLMProvider(openAIConfig)
 		if err == nil {
 			a.llm = llm
@@ -741,9 +764,9 @@ func (a *App) RAGQuery(query string) (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"message_id": response.MessageID,
-		"content":    response.Content,
-		"sources":    response.Sources,
+		"message_id":  response.MessageID,
+		"content":     response.Content,
+		"sources":     response.Sources,
 		"tokens_used": response.TokensUsed,
 	}, nil
 }
@@ -753,8 +776,8 @@ func (a *App) GetRAGStatus() (map[string]interface{}, error) {
 	if a.rag == nil {
 		return map[string]interface{}{
 			"available":      false,
-			"llm_provider":  "",
-			"llm_model":     "",
+			"llm_provider":   "",
+			"llm_model":      "",
 			"database_ready": a.dbm.IsInitialized(),
 		}, nil
 	}
@@ -764,7 +787,7 @@ func (a *App) GetRAGStatus() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"available":      status.Available,
 		"llm_provider":   status.LLMProvider,
-		"llm_model":     status.LLMModel,
+		"llm_model":      status.LLMModel,
 		"database_ready": status.DatabaseReady,
 	}, nil
 }
@@ -789,8 +812,8 @@ func (a *App) GetGraphConfig() (config.GraphConfig, error) {
 func (a *App) SetGraphConfig(minSimilarityThreshold float32, maxNodes int, showImplicitLinks bool) error {
 	cfg := config.GraphConfig{
 		MinSimilarityThreshold: minSimilarityThreshold,
-		MaxNodes:                 maxNodes,
-		ShowImplicitLinks:       showImplicitLinks,
+		MaxNodes:               maxNodes,
+		ShowImplicitLinks:      showImplicitLinks,
 	}
 	a.cfg.SetGraphConfig(cfg)
 	return a.cfg.Save()
@@ -804,12 +827,30 @@ func (a *App) GetLLMConfig() (config.LLMConfig, error) {
 }
 
 // SetLLMConfig sets the LLM configuration
-func (a *App) SetLLMConfig(provider string, model string, temperature float32, maxTokens int) error {
+func (a *App) SetLLMConfig(provider string, model string, temperature float32, maxTokens int, apiKey, baseURL, organization string) error {
+	// Get existing config to preserve other fields if needed
+	currentConfig := a.cfg.GetLLMConfig()
+
 	llmConfig := config.LLMConfig{
 		Provider:    provider,
 		Model:       model,
 		Temperature: temperature,
 		MaxTokens:   maxTokens,
+		OpenAI:      currentConfig.OpenAI, // Preserve existing OpenAI config
+		Ollama:      currentConfig.Ollama, // Preserve existing Ollama config
+	}
+
+	// Update OpenAI specific config if provided
+	if apiKey != "" {
+		llmConfig.OpenAI.APIKey = apiKey
+	}
+	// Always update BaseURL and Organization if provided (allow empty to clear? No, usually empty means unchanged or default)
+	// For now, let's assume we update them if they are passed.
+	if baseURL != "" {
+		llmConfig.OpenAI.BaseURL = baseURL
+	}
+	if organization != "" {
+		llmConfig.OpenAI.Organization = organization
 	}
 
 	a.cfg.SetLLMConfig(llmConfig)

@@ -10,7 +10,7 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	mu sync.RWMutex
+	mu         sync.RWMutex
 	configPath string
 
 	// AI Configuration
@@ -129,6 +129,12 @@ type LLMConfig struct {
 
 	// MaxTokens is the maximum tokens for completion
 	MaxTokens int `json:"max_tokens"`
+
+	// OpenAI Configuration for Chat
+	OpenAI OpenAIConfig `json:"openai"`
+
+	// Ollama Configuration for Chat
+	Ollama OllamaConfig `json:"ollama"`
 }
 
 // RAGConfig holds RAG (Retrieval Augmented Generation) configuration
@@ -356,6 +362,60 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 		c.Watcher.Workers = loaded.Watcher.Workers
 	}
 	c.Watcher.FullIndexOnStart = loaded.Watcher.FullIndexOnStart
+
+	// LLM Config
+	if loaded.LLM.Provider != "" {
+		c.LLM.Provider = loaded.LLM.Provider
+	}
+	if loaded.LLM.Model != "" {
+		c.LLM.Model = loaded.LLM.Model
+	}
+	if loaded.LLM.Temperature >= 0 {
+		c.LLM.Temperature = loaded.LLM.Temperature
+	}
+	if loaded.LLM.MaxTokens > 0 {
+		c.LLM.MaxTokens = loaded.LLM.MaxTokens
+	}
+	// LLM OpenAI
+	if loaded.LLM.OpenAI.APIKey != "" {
+		c.LLM.OpenAI.APIKey = loaded.LLM.OpenAI.APIKey
+	}
+	if loaded.LLM.OpenAI.BaseURL != "" {
+		c.LLM.OpenAI.BaseURL = loaded.LLM.OpenAI.BaseURL
+	}
+	if loaded.LLM.OpenAI.Organization != "" {
+		c.LLM.OpenAI.Organization = loaded.LLM.OpenAI.Organization
+	}
+	// LLM Ollama
+	if loaded.LLM.Ollama.BaseURL != "" {
+		c.LLM.Ollama.BaseURL = loaded.LLM.Ollama.BaseURL
+	}
+	if loaded.LLM.Ollama.EmbeddingModel != "" {
+		c.LLM.Ollama.EmbeddingModel = loaded.LLM.Ollama.EmbeddingModel
+	}
+	if loaded.LLM.Ollama.Timeout > 0 {
+		c.LLM.Ollama.Timeout = loaded.LLM.Ollama.Timeout
+	}
+
+	// RAG Config
+	if loaded.RAG.MaxContextChunks > 0 {
+		c.RAG.MaxContextChunks = loaded.RAG.MaxContextChunks
+	}
+	if loaded.RAG.Temperature >= 0 {
+		c.RAG.Temperature = loaded.RAG.Temperature
+	}
+	if loaded.RAG.SystemPrompt != "" {
+		c.RAG.SystemPrompt = loaded.RAG.SystemPrompt
+	}
+
+	// Graph Config
+	if loaded.Graph.MinSimilarityThreshold >= 0 {
+		c.Graph.MinSimilarityThreshold = loaded.Graph.MinSimilarityThreshold
+	}
+	if loaded.Graph.MaxNodes > 0 {
+		c.Graph.MaxNodes = loaded.Graph.MaxNodes
+	}
+	c.Graph.ShowImplicitLinks = loaded.Graph.ShowImplicitLinks
 }
 
 // SetOpenAIConfig sets the OpenAI configuration
@@ -520,6 +580,20 @@ func (c *Config) SetLLMConfig(cfg LLMConfig) {
 	defer c.mu.Unlock()
 
 	c.LLM = cfg
+}
+
+// SetLLMOpenAIConfig sets the OpenAI configuration for LLM
+func (c *Config) SetLLMOpenAIConfig(apiKey, baseURL, organization string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.LLM.OpenAI.APIKey = apiKey
+	if baseURL != "" {
+		c.LLM.OpenAI.BaseURL = baseURL
+	}
+	if organization != "" {
+		c.LLM.OpenAI.Organization = organization
+	}
 }
 
 // GetRAGConfig returns a copy of the RAG configuration

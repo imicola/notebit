@@ -150,8 +150,8 @@ export function SetGraphConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetGraphConfig'](arg1, arg2, arg3);
 }
 
-export function SetLLMConfig(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['App']['SetLLMConfig'](arg1, arg2, arg3, arg4);
+export function SetLLMConfig(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['SetLLMConfig'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
 export function SetOllamaConfig(arg1, arg2, arg3) {

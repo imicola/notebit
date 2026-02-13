@@ -57,6 +57,12 @@ export default function AISettings() {
     max_tokens: 2000
   });
 
+  const [llmOpenAIConfig, setLLMOpenAIConfig] = useState({
+    api_key: '',
+    base_url: '',
+    organization: ''
+  });
+
   // RAG Config
   const [ragConfig, setRAGConfigState] = useState({
     max_context_chunks: 5,
@@ -93,7 +99,22 @@ export default function AISettings() {
       setOpenaiConfig(openai);
       setOllamaConfig(ollama);
       setChunkingConfig(chunking);
-      setLLMConfig(llm);
+      
+      setLLMConfig({
+        provider: llm.provider,
+        model: llm.model,
+        temperature: llm.temperature,
+        max_tokens: llm.max_tokens
+      });
+      
+      if (llm.openai) {
+        setLLMOpenAIConfig({
+          api_key: llm.openai.api_key || '',
+          base_url: llm.openai.base_url || '',
+          organization: llm.openai.organization || ''
+        });
+      }
+
       setRAGConfigState(rag);
       setGraphConfigState(graph);
     } catch (error) {
@@ -132,7 +153,10 @@ export default function AISettings() {
         llmConfig.provider,
         llmConfig.model,
         llmConfig.temperature,
-        llmConfig.max_tokens
+        llmConfig.max_tokens,
+        llmOpenAIConfig.api_key,
+        llmOpenAIConfig.base_url,
+        llmOpenAIConfig.organization
       );
 
       // Save RAG config
@@ -465,6 +489,44 @@ export default function AISettings() {
                   Available models: gpt-4o, gpt-4o-mini, gpt-3.5-turbo
                 </p>
               </div>
+
+              {llmConfig.provider === 'openai' && (
+                <div className="space-y-4 border-t border-modifier-border pt-4 mt-4">
+                  <h4 className="text-sm font-medium text-normal">OpenAI Settings (Chat Specific)</h4>
+                  <div>
+                    <label className="block text-sm font-medium text-normal mb-1">API Key</label>
+                    <input
+                      type="password"
+                      value={llmOpenAIConfig.api_key}
+                      onChange={(e) => setLLMOpenAIConfig({...llmOpenAIConfig, api_key: e.target.value})}
+                      className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+                      placeholder="Leave empty to use global AI settings"
+                    />
+                    <p className="text-xs text-muted mt-1">Overrides the global AI provider key if set.</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-normal mb-1">Base URL</label>
+                      <input
+                        type="text"
+                        value={llmOpenAIConfig.base_url}
+                        onChange={(e) => setLLMOpenAIConfig({...llmOpenAIConfig, base_url: e.target.value})}
+                        className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+                        placeholder="https://api.openai.com/v1"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-normal mb-1">Organization ID</label>
+                      <input
+                        type="text"
+                        value={llmOpenAIConfig.organization}
+                        onChange={(e) => setLLMOpenAIConfig({...llmOpenAIConfig, organization: e.target.value})}
+                        className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
