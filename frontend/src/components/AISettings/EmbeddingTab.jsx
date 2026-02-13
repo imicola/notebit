@@ -8,10 +8,71 @@ export default function EmbeddingTab({
   ollamaConfig, setOllamaConfig,
   openaiConfig, setOpenaiConfig,
   chunkingConfig, setChunkingConfig,
-  testingOpenAI, openaiTestResult, handleTestOpenAI
+  testingOpenAI, openaiTestResult, handleTestOpenAI,
+  similarityStatus,
+  vectorEngine,
+  setVectorEngine,
+  availableVectorEngines,
+  reindexing,
+  reindexResult,
+  handleReindexEmbeddings
 }) {
   return (
     <div className="space-y-6">
+      {/* Embedding Index Maintenance */}
+      <section>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-medium text-normal">Embedding Index</h3>
+          <button
+            onClick={handleReindexEmbeddings}
+            disabled={reindexing}
+            className="flex items-center gap-2 px-3 py-2 rounded-md border border-modifier-border bg-primary-alt text-sm text-normal hover:border-obsidian-purple/60 transition-colors disabled:opacity-50"
+          >
+            {reindexing ? <RefreshCw className="animate-spin" size={14} /> : <RefreshCw size={14} />}
+            {reindexing ? 'Reindexing...' : 'Rebuild Embeddings'}
+          </button>
+        </div>
+        <div className="rounded-lg border border-modifier-border bg-primary-alt/30 p-4 text-sm">
+          <div className="flex items-center justify-between text-muted">
+            <span>Indexed Chunks</span>
+            <span>{similarityStatus?.indexed_chunks ?? 0} / {similarityStatus?.total_chunks ?? 0}</span>
+          </div>
+          <div className="flex items-center justify-between text-muted mt-2">
+            <span>Semantic Search</span>
+            <span>{similarityStatus?.available ? 'Available' : 'Unavailable'}</span>
+          </div>
+          <div className="flex items-center justify-between text-muted mt-2">
+            <span>Vector Engine</span>
+            <span>{similarityStatus?.vector_engine || 'unknown'}</span>
+          </div>
+          <div className="mt-3">
+            <label className="block text-sm font-medium text-normal mb-1">Preferred Vector Engine</label>
+            <select
+              value={vectorEngine}
+              onChange={(e) => setVectorEngine(e.target.value)}
+              className="w-full rounded-md border border-modifier-border bg-primary-alt px-3 py-2 text-sm text-normal focus:border-obsidian-purple focus:outline-none"
+            >
+              {(availableVectorEngines || []).map((engine) => (
+                <option key={engine} value={engine}>{engine}</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted mt-1">
+              Use <span className="font-medium">sqlite-vec</span> for gray testing; unsupported builds automatically fallback to brute-force.
+            </p>
+          </div>
+          {reindexResult?.ok && (
+            <div className="mt-3 text-green-500 text-xs">
+              Rebuild complete: {reindexResult.result?.processed ?? 0}/{reindexResult.result?.total ?? 0} processed, {reindexResult.result?.failed ?? 0} failed.
+            </div>
+          )}
+          {reindexResult && !reindexResult.ok && (
+            <div className="mt-3 text-orange-500 text-xs">
+              {reindexResult.message}
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Provider Selection */}
       <section>
         <div className="flex items-center gap-2 mb-4">

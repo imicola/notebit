@@ -44,6 +44,7 @@ func (a *App) OpenFolder() (string, error) {
 		// Don't fail if database initialization fails - log but continue
 		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Database initialization failed")
 	}
+	a.applyVectorEngineConfig()
 	a.initializeRAG()
 	a.initializeGraph()
 
@@ -71,6 +72,7 @@ func (a *App) SetFolder(path string) error {
 		// Don't fail if database initialization fails
 		logger.Warn("Warning: database initialization failed: %v", err)
 	}
+	a.applyVectorEngineConfig()
 	a.initializeRAG()
 	a.initializeGraph()
 
@@ -225,9 +227,7 @@ func (a *App) indexFileContent(path, content string) error {
 		return err
 	}
 
-	// Index in database
-	repo := a.dbm.Repository()
-	if err := repo.IndexFile(path, content, info.ModTime().Unix(), info.Size()); err != nil {
+	if err := a.indexFileWithEmbeddings(path, content, info.ModTime().Unix(), info.Size()); err != nil {
 		logger.ErrorWithFields(a.ctx, map[string]interface{}{
 			"path":  path,
 			"error": err.Error(),
@@ -238,6 +238,37 @@ func (a *App) indexFileContent(path, content string) error {
 
 	logger.DebugWithDuration(a.ctx, timer(), "File indexed: %s", path)
 	return nil
+}
+
+// indexFileWithEmbeddings indexes file metadata + chunks/embeddings in one path.
+// Falls back to metadata-only indexing when AI processing is unavailable.
+func (a *App) indexFileWithEmbeddings(path, content string, modTime, size int64) error {
+	repo := a.dbm.Repository()
+
+	chunks, err := a.ai.ProcessDocument(content)
+	if err != nil {
+		logger.WarnWithFields(a.ctx, map[string]interface{}{
+			"path":  path,
+			"error": err.Error(),
+		}, "Embedding processing failed, fallback to metadata-only index")
+		return repo.IndexFile(path, content, modTime, size)
+	}
+
+	dbChunks := make([]database.ChunkInput, len(chunks))
+	for i, chunk := range chunks {
+		dbChunks[i] = database.ChunkInput{
+			Content: chunk.Content,
+			Heading: chunk.Heading,
+		}
+		if embedding, ok := chunk.Metadata["embedding"].([]float32); ok {
+			dbChunks[i].Embedding = embedding
+		}
+		if model, ok := chunk.Metadata["embedding_model"].(string); ok {
+			dbChunks[i].EmbeddingModel = model
+		}
+	}
+
+	return repo.IndexFileWithChunks(path, content, modTime, size, dbChunks)
 }
 
 func (a *App) startIndexWorkers(count int) {

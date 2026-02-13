@@ -78,6 +78,10 @@ export function GetSimilarityStatus() {
   return window['go']['main']['App']['GetSimilarityStatus']();
 }
 
+export function GetVectorSearchEngine() {
+  return window['go']['main']['App']['GetVectorSearchEngine']();
+}
+
 export function IndexFile(arg1) {
   return window['go']['main']['App']['IndexFile'](arg1);
 }
@@ -164,6 +168,10 @@ export function SetOpenAIConfig(arg1, arg2, arg3) {
 
 export function SetRAGConfig(arg1, arg2, arg3) {
   return window['go']['main']['App']['SetRAGConfig'](arg1, arg2, arg3);
+}
+
+export function SetVectorSearchEngine(arg1) {
+  return window['go']['main']['App']['SetVectorSearchEngine'](arg1);
 }
 
 export function TestOpenAIConnection(arg1, arg2, arg3, arg4) {

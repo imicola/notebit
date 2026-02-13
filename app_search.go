@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"notebit/pkg/config"
+	"notebit/pkg/database"
 	"notebit/pkg/graph"
 )
 
@@ -44,6 +45,39 @@ func (a *App) FindSimilar(content string, limit int) ([]SimilarNote, error) {
 // GetSimilarityStatus returns the availability status of semantic search
 func (a *App) GetSimilarityStatus() (map[string]interface{}, error) {
 	return a.ks.GetSimilarityStatus()
+}
+
+// GetVectorSearchEngine returns current vector search engine and available options.
+func (a *App) GetVectorSearchEngine() (map[string]interface{}, error) {
+	if !a.dbm.IsInitialized() {
+		return map[string]interface{}{
+			"current":   "",
+			"available": []string{database.VectorEngineBruteForce, database.VectorEngineSQLiteVec},
+		}, nil
+	}
+
+	return map[string]interface{}{
+		"current":   a.dbm.Repository().GetVectorEngine(),
+		"available": []string{database.VectorEngineBruteForce, database.VectorEngineSQLiteVec},
+	}, nil
+}
+
+// SetVectorSearchEngine updates vector search engine with fallback behavior.
+func (a *App) SetVectorSearchEngine(engine string) (map[string]interface{}, error) {
+	if !a.dbm.IsInitialized() {
+		return nil, fmt.Errorf("database not initialized")
+	}
+
+	effective := a.dbm.Repository().SetVectorEngine(engine)
+	a.cfg.SetVectorSearchEngine(effective)
+	if err := a.cfg.Save(); err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"requested": engine,
+		"effective": effective,
+	}, nil
 }
 
 // ============ RAG CHAT API METHODS ============

@@ -11,6 +11,11 @@ export const useAISettings = () => {
   const [status, setStatus] = useState(null);
   const [testingOpenAI, setTestingOpenAI] = useState(false);
   const [openaiTestResult, setOpenaiTestResult] = useState(null);
+  const [similarityStatus, setSimilarityStatus] = useState(null);
+  const [vectorEngine, setVectorEngine] = useState('brute-force');
+  const [availableVectorEngines, setAvailableVectorEngines] = useState(['brute-force', 'sqlite-vec']);
+  const [reindexing, setReindexing] = useState(false);
+  const [reindexResult, setReindexResult] = useState(null);
 
   // Config States
   const [provider, setProvider] = useState('ollama');
@@ -62,17 +67,22 @@ export const useAISettings = () => {
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
-      const [aiStatus, openai, ollama, chunking, llm, rag, graph] = await Promise.all([
+      const [aiStatus, openai, ollama, chunking, llm, rag, graph, similarity, vectorEngineStatus] = await Promise.all([
         aiService.getStatus(),
         aiService.getOpenAIConfig(),
         aiService.getOllamaConfig(),
         aiService.getChunkingConfig(),
         aiService.getLLMConfig(),
         aiService.getRAGConfig(),
-        aiService.getGraphConfig()
+        aiService.getGraphConfig(),
+        aiService.getSimilarityStatus(),
+        aiService.getVectorSearchEngine()
       ]);
 
       setStatus(aiStatus);
+      setSimilarityStatus(similarity);
+      setVectorEngine(vectorEngineStatus?.current || similarity?.vector_engine || 'brute-force');
+      setAvailableVectorEngines(vectorEngineStatus?.available || ['brute-force', 'sqlite-vec']);
       setProvider(aiStatus.current_provider || 'ollama');
       setOpenaiConfig(openai);
       setOllamaConfig(ollama);
@@ -167,14 +177,18 @@ export const useAISettings = () => {
         graphConfig.show_implicit_links
       );
 
+      await aiService.setVectorSearchEngine(vectorEngine);
+
       const newStatus = await aiService.getStatus();
       setStatus(newStatus);
+      const similarity = await aiService.getSimilarityStatus();
+      setSimilarityStatus(similarity);
     } catch (error) {
       console.error('Failed to save settings:', error);
     } finally {
       setSaving(false);
     }
-  }, [provider, openaiConfig, ollamaConfig, chunkingConfig, llmConfig, llmOpenAIConfig, ragConfig, graphConfig]);
+  }, [provider, openaiConfig, ollamaConfig, chunkingConfig, llmConfig, llmOpenAIConfig, ragConfig, graphConfig, vectorEngine]);
 
   // Test OpenAI connection
   const handleTestOpenAI = useCallback(async () => {
@@ -193,14 +207,44 @@ export const useAISettings = () => {
     }
   }, [openaiConfig]);
 
+  const handleReindexEmbeddings = useCallback(async () => {
+    setReindexing(true);
+    setReindexResult(null);
+    try {
+      const result = await aiService.reindexAllWithEmbeddings();
+      setReindexResult({ ok: true, result });
+      const similarity = await aiService.getSimilarityStatus();
+      setSimilarityStatus(similarity);
+      if (similarity?.vector_engine) {
+        setVectorEngine(similarity.vector_engine);
+      }
+      const latestStatus = await aiService.getStatus();
+      setStatus(latestStatus);
+    } catch (error) {
+      setReindexResult({
+        ok: false,
+        message: error?.message || 'Reindex failed'
+      });
+    } finally {
+      setReindexing(false);
+    }
+  }, []);
+
   return {
     // Loading/saving state
     loading, saving, status,
+    similarityStatus,
+    vectorEngine,
+    setVectorEngine,
+    availableVectorEngines,
+    reindexing,
+    reindexResult,
     // Provider
     provider, setProvider,
     // OpenAI
     openaiConfig, setOpenaiConfig,
     testingOpenAI, openaiTestResult, handleTestOpenAI,
+    handleReindexEmbeddings,
     // Ollama
     ollamaConfig, setOllamaConfig,
     // Chunking

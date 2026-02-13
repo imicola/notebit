@@ -2,7 +2,7 @@
  * RAG Service - Abstraction layer for RAG chat operations
  * Wraps Wails API calls with consistent error handling
  */
-import { RAGQuery } from '../../wailsjs/go/main/App';
+import { RAGQuery, GetRAGStatus } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 /**
@@ -33,6 +33,10 @@ export const ragService = {
    */
   async query(query) {
     return wrapCall('ragQuery', () => RAGQuery(query));
+  },
+
+  async getStatus() {
+    return wrapCall('getRagStatus', GetRAGStatus);
   },
 
   /**

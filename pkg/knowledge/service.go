@@ -197,9 +197,13 @@ func (s *Service) GetSimilarityStatus() (map[string]interface{}, error) {
 
 	var embeddedChunks int64
 	var totalChunks int64
+	vectorEngine := ""
 	if stats != nil {
 		embeddedChunks = stats.EmbeddedChunks
 		totalChunks = stats.TotalChunks
+	}
+	if dbInitialized {
+		vectorEngine = s.dbm.Repository().GetVectorEngine()
 	}
 
 	return map[string]interface{}{
@@ -208,5 +212,6 @@ func (s *Service) GetSimilarityStatus() (map[string]interface{}, error) {
 		"ai_healthy":     aiStatus != nil && aiStatus.ProviderHealthy,
 		"indexed_chunks": embeddedChunks,
 		"total_chunks":   totalChunks,
+		"vector_engine":  vectorEngine,
 	}, nil
 }

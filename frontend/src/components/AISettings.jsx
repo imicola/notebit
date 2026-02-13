@@ -11,9 +11,11 @@ export default function AISettings() {
 
   const {
     loading, saving, status,
+    similarityStatus, vectorEngine, setVectorEngine, availableVectorEngines, reindexing, reindexResult,
     provider, setProvider,
     openaiConfig, setOpenaiConfig,
     testingOpenAI, openaiTestResult, handleTestOpenAI,
+    handleReindexEmbeddings,
     ollamaConfig, setOllamaConfig,
     chunkingConfig, setChunkingConfig,
     llmConfig, setLLMConfig,
@@ -66,6 +68,13 @@ export default function AISettings() {
           chunkingConfig={chunkingConfig} setChunkingConfig={setChunkingConfig}
           testingOpenAI={testingOpenAI} openaiTestResult={openaiTestResult}
           handleTestOpenAI={handleTestOpenAI}
+          similarityStatus={similarityStatus}
+          vectorEngine={vectorEngine}
+          setVectorEngine={setVectorEngine}
+          availableVectorEngines={availableVectorEngines}
+          reindexing={reindexing}
+          reindexResult={reindexResult}
+          handleReindexEmbeddings={handleReindexEmbeddings}
         />
       )}
 

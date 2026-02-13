@@ -19,7 +19,8 @@ import {
   SetRAGConfig,
   GetGraphConfig,
   SetGraphConfig,
-  GetSimilarityStatus
+  GetSimilarityStatus,
+  ReindexAllWithEmbeddings
 } from '../../wailsjs/go/main/App';
 
 /**
@@ -42,6 +43,14 @@ const wrapCall = async (operation, apiCall) => {
   }
 };
 
+const callAppMethod = async (method, ...args) => {
+  const fn = window?.go?.main?.App?.[method];
+  if (typeof fn !== 'function') {
+    throw new Error(`App method not available: ${method}`);
+  }
+  return fn(...args);
+};
+
 export const aiService = {
   // --- Status ---
   async getStatus() {
@@ -50,6 +59,18 @@ export const aiService = {
 
   async getSimilarityStatus() {
     return wrapCall('getSimilarityStatus', GetSimilarityStatus);
+  },
+
+  async reindexAllWithEmbeddings() {
+    return wrapCall('reindexAllWithEmbeddings', ReindexAllWithEmbeddings);
+  },
+
+  async getVectorSearchEngine() {
+    return wrapCall('getVectorSearchEngine', () => callAppMethod('GetVectorSearchEngine'));
+  },
+
+  async setVectorSearchEngine(engine) {
+    return wrapCall('setVectorSearchEngine', () => callAppMethod('SetVectorSearchEngine', engine));
   },
 
   // --- OpenAI ---

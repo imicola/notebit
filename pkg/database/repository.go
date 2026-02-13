@@ -17,6 +17,7 @@ type Repository struct {
 	vectorCache       map[uint][]float32
 	vectorCacheLoaded bool
 	vectorCacheMu     sync.RWMutex
+	vectorEngine      VectorSearchEngine
 }
 
 // NewRepository creates a new repository
@@ -25,6 +26,7 @@ func (m *Manager) Repository() *Repository {
 	defer m.mu.Unlock()
 	if m.repo == nil {
 		m.repo = &Repository{db: m.db}
+		m.repo.vectorEngine = NewBruteForceVectorEngine()
 	}
 	return m.repo
 }
@@ -106,7 +108,34 @@ func (r *Repository) FileNeedsIndexing(path string, content string) (bool, error
 		return false, err
 	}
 
-	return existingFile.ContentHash != contentHash, nil
+	if existingFile.ContentHash != contentHash {
+		return true, nil
+	}
+
+	// Content unchanged: still re-index when embeddings are missing or incomplete.
+	trimmedContent := strings.TrimSpace(content)
+	if trimmedContent == "" {
+		return false, nil
+	}
+
+	var totalChunks int64
+	if err := r.db.Model(&Chunk{}).Where("file_id = ?", existingFile.ID).Count(&totalChunks).Error; err != nil {
+		return false, err
+	}
+	if totalChunks == 0 {
+		return true, nil
+	}
+
+	var embeddedChunks int64
+	if err := r.db.Model(&Chunk{}).
+		Where("file_id = ?", existingFile.ID).
+		Where("embedding_blob IS NOT NULL").
+		Where("length(embedding_blob) > 0").
+		Count(&embeddedChunks).Error; err != nil {
+		return false, err
+	}
+
+	return embeddedChunks < totalChunks, nil
 }
 
 // ============ CHUNK OPERATIONS ============

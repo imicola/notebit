@@ -7,6 +7,7 @@ export default function ChatPanel() {
 	const [messages, setMessages] = useState([]);
 	const [input, setInput] = useState('');
 	const [loading, setLoading] = useState(false);
+	const [ragStatus, setRagStatus] = useState(null);
 	const messagesEndRef = useRef(null);
 
 	// Track streaming state per message
@@ -21,6 +22,12 @@ export default function ChatPanel() {
 	}, [messages, streamingStates, input]);
 
 	// Listen for streaming chunks
+	useEffect(() => {
+		ragService.getStatus().then(setRagStatus).catch(() => {
+			setRagStatus({ available: false, database_ready: false });
+		});
+	}, []);
+
 	useEffect(() => {
 		const cleanup = ragService.onChunk((data) => {
 			const { messageId, content } = data;
@@ -69,6 +76,16 @@ export default function ChatPanel() {
 		e.preventDefault();
 		const trimmed = input.trim();
 		if (!trimmed || loading) return;
+
+		if (ragStatus && !ragStatus.available) {
+			setMessages(prev => [...prev, {
+				id: Date.now().toString(),
+				role: 'system',
+				content: 'RAG service is not ready. Please configure LLM and ensure the database is initialized.',
+				timestamp: Date.now(),
+			}]);
+			return;
+		}
 
 		// Add user message
 		const userMsg = {
@@ -141,6 +158,9 @@ export default function ChatPanel() {
 					<Sparkles className="text-obsidian-purple" size={18} />
 					<h2 className="text-sm font-semibold text-normal">Knowledge Chat</h2>
 				</div>
+				{ragStatus && !ragStatus.available && (
+					<div className="text-xs text-orange-500">RAG unavailable</div>
+				)}
 			</div>
 
 			{/* Messages */}

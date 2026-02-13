@@ -55,7 +55,7 @@ function App() {
 
   // Right sidebar state
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(true);
-  const [searchTrigger, setSearchTrigger] = useState(0);
+  const [searchRequest, setSearchRequest] = useState(null);
 
   // View mode state
   const [viewMode, setViewMode] = useState('editor');
@@ -88,7 +88,10 @@ function App() {
   const handleSave = useCallback(async (content) => {
     const result = await baseSaveFile(content);
     if (result) {
-      setSearchTrigger(prev => prev + 1);
+      setSearchRequest({
+        id: Date.now(),
+        content,
+      });
     }
   }, [baseSaveFile]);
 
@@ -339,7 +342,7 @@ function App() {
         {viewMode === 'editor' && (
           <SimilarNotesSidebar
             query={currentContent}
-            triggerSearch={searchTrigger}
+            searchRequest={searchRequest}
             isOpen={isRightSidebarOpen && !isZenMode}
             onClose={() => setIsRightSidebarOpen(false)}
             onNoteClick={(note) => selectFile({ path: note.path, name: note.title })}

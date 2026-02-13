@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"sort"
 )
 
 // VectorOperation represents a vector operation result
@@ -57,78 +56,22 @@ func (r *Repository) GetChunkEmbedding(chunkID uint) ([]float32, error) {
 // For now, this is a naive implementation that loads all vectors and computes similarity
 // In production with sqlite-vec, this will use the vector distance function
 func (r *Repository) SearchSimilar(queryVector []float32, limit int) ([]SimilarChunk, error) {
-	cache, err := r.getVectorCache()
-	if err != nil {
+	if r.vectorEngine == nil {
+		r.vectorEngine = NewBruteForceVectorEngine()
+	}
+
+	results, err := r.vectorEngine.Search(r, queryVector, limit)
+	if err == nil {
+		return results, nil
+	}
+
+	if r.vectorEngine.Name() == VectorEngineBruteForce {
 		return nil, err
 	}
 
-	// 2. Calculate cosine similarity for each chunk
-	type ScoredChunk struct {
-		ID         uint
-		Similarity float32
-	}
-
-	scores := make([]ScoredChunk, 0, len(cache))
-
-	for id, vec := range cache {
-		if len(vec) != len(queryVector) {
-			continue
-		}
-
-		similarity := cosineSimilarity(queryVector, vec)
-		scores = append(scores, ScoredChunk{
-			ID:         id,
-			Similarity: similarity,
-		})
-	}
-
-	// 3. Sort by similarity (descending)
-	sort.Slice(scores, func(i, j int) bool {
-		return scores[i].Similarity > scores[j].Similarity
-	})
-
-	// 4. Apply limit
-	if limit > 0 && len(scores) > limit {
-		scores = scores[:limit]
-	}
-
-	if len(scores) == 0 {
-		return []SimilarChunk{}, nil
-	}
-
-	// 5. Fetch full content for top K results
-	topIDs := make([]uint, len(scores))
-	scoreMap := make(map[uint]float32)
-	for i, s := range scores {
-		topIDs[i] = s.ID
-		scoreMap[s.ID] = s.Similarity
-	}
-
-	var fullChunks []Chunk
-	err = r.db.Preload("File").
-		Where("id IN ?", topIDs).
-		Find(&fullChunks).Error
-	if err != nil {
-		return nil, err
-	}
-
-	// 6. Construct final result
-	results := make([]SimilarChunk, 0, len(fullChunks))
-	for _, chunk := range fullChunks {
-		results = append(results, SimilarChunk{
-			ChunkID:    chunk.ID,
-			Content:    chunk.Content,
-			Heading:    chunk.Heading,
-			Similarity: scoreMap[chunk.ID],
-			File:       chunk.File,
-		})
-	}
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Similarity > results[j].Similarity
-	})
-
-	return results, nil
+	fallback := NewBruteForceVectorEngine()
+	r.vectorEngine = fallback
+	return fallback.Search(r, queryVector, limit)
 }
 
 // SimilarChunk represents a chunk with its similarity score

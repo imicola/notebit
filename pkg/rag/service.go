@@ -65,6 +65,18 @@ func (s *Service) Query(ctx context.Context, query string) (*ChatResponse, error
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("query cannot be empty")
+	}
+
+	if !s.db.IsInitialized() {
+		return nil, fmt.Errorf("database is not initialized")
+	}
+
+	if s.llm == nil {
+		return nil, fmt.Errorf("LLM provider is not configured")
+	}
+
 	// Step 1: Generate query embedding
 	queryEmbedding, err := s.ai.GenerateEmbedding(query)
 	if err != nil {
@@ -83,6 +95,9 @@ func (s *Service) Query(ctx context.Context, query string) (*ChatResponse, error
 	similarChunks, err := repo.SearchSimilar(queryEmbedding.Embedding, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search similar chunks: %w", err)
+	}
+	if len(similarChunks) == 0 {
+		return nil, fmt.Errorf("knowledge base has no indexed context yet, please save or reindex notes first")
 	}
 
 	// Step 3: Build context from retrieved chunks

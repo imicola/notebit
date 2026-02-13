@@ -6,11 +6,11 @@ import { SEMANTIC_SEARCH } from '../constants';
 
 const SimilarNotesSidebar = ({
   query,          // Content to search for similar notes
+  searchRequest,  // Snapshot generated on save to trigger search
   isOpen,
   onClose,
   onNoteClick,
-  width,
-  triggerSearch   // Boolean or number that changes when search should trigger
+  width
 }) => {
   const [status, setStatus] = useState(null);
   const [notes, setNotes] = useState([]);
@@ -42,10 +42,10 @@ const SimilarNotesSidebar = ({
     }
   };
 
-  // Search when trigger changes (on save)
+  // Search only when a new save request arrives
   useEffect(() => {
-    const trimmedQuery = (query || '').trim();
-    if (!trimmedQuery || !status?.available || !triggerSearch) {
+    const trimmedQuery = (searchRequest?.content || '').trim();
+    if (!trimmedQuery || !status?.available || !searchRequest?.id) {
       return;
     }
 
@@ -80,7 +80,7 @@ const SimilarNotesSidebar = ({
           setLoading(false);
         });
     }, SEMANTIC_SEARCH.DEBOUNCE_MS);
-  }, [triggerSearch, status?.available, query]);
+  }, [searchRequest, status?.available]);
 
   // Not available state
   if (status && !status.available) {

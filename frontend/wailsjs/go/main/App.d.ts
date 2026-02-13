@@ -44,6 +44,8 @@ export function GetRAGStatus():Promise<Record<string, any>>;
 
 export function GetSimilarityStatus():Promise<Record<string, any>>;
 
+export function GetVectorSearchEngine():Promise<Record<string, any>>;
+
 export function IndexFile(arg1:string):Promise<void>;
 
 export function IndexFileWithEmbedding(arg1:string):Promise<void>;
@@ -87,6 +89,8 @@ export function SetOllamaConfig(arg1:string,arg2:string,arg3:number):Promise<voi
 export function SetOpenAIConfig(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function SetRAGConfig(arg1:number,arg2:number,arg3:string):Promise<void>;
+
+export function SetVectorSearchEngine(arg1:string):Promise<Record<string, any>>;
 
 export function TestOpenAIConnection(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Record<string, any>>;
 

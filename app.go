@@ -98,8 +98,28 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize RAG and Graph services after database is ready
 	a.initializeRAG()
 	a.initializeGraph()
+	a.applyVectorEngineConfig()
 
 	logger.InfoWithDuration(ctx, timer(), "App startup completed")
+}
+
+func (a *App) applyVectorEngineConfig() {
+	if !a.dbm.IsInitialized() {
+		return
+	}
+
+	repo := a.dbm.Repository()
+	configured := a.cfg.GetVectorSearchEngine()
+	if configured == "" {
+		configured = "brute-force"
+	}
+	effective := repo.SetVectorEngine(configured)
+	if effective != configured {
+		logger.WarnWithFields(a.ctx, map[string]interface{}{
+			"requested": configured,
+			"effective": effective,
+		}, "Vector engine fallback applied")
+	}
 }
 
 func (a *App) loadConfig() error {

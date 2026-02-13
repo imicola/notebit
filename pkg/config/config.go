@@ -48,6 +48,9 @@ type AIConfig struct {
 
 	// BatchSize is the number of texts to embed in a single batch request
 	BatchSize int `json:"batch_size"`
+
+	// VectorSearchEngine controls vector retrieval backend (e.g. "brute-force", "sqlite-vec")
+	VectorSearchEngine string `json:"vector_search_engine"`
 }
 
 // OpenAIConfig holds OpenAI-specific configuration
@@ -188,6 +191,7 @@ func (c *Config) setDefaults() {
 	// AI Defaults
 	c.AI.Provider = "ollama" // Default to local-first approach
 	c.AI.BatchSize = 32
+	c.AI.VectorSearchEngine = "brute-force"
 
 	// OpenAI Defaults
 	c.AI.OpenAI.EmbeddingModel = "text-embedding-3-small"
@@ -329,6 +333,9 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 	}
 	if loaded.AI.BatchSize > 0 {
 		c.AI.BatchSize = loaded.AI.BatchSize
+	}
+	if loaded.AI.VectorSearchEngine != "" {
+		c.AI.VectorSearchEngine = loaded.AI.VectorSearchEngine
 	}
 
 	// Chunking Config
@@ -478,6 +485,22 @@ func (c *Config) GetEmbeddingModel() string {
 	defer c.mu.RUnlock()
 
 	return c.AI.EmbeddingModel
+}
+
+// SetVectorSearchEngine sets the vector search engine name
+func (c *Config) SetVectorSearchEngine(engine string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.AI.VectorSearchEngine = engine
+}
+
+// GetVectorSearchEngine returns configured vector search engine
+func (c *Config) GetVectorSearchEngine() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.AI.VectorSearchEngine
 }
 
 // GetOpenAIConfig returns a copy of the OpenAI configuration
