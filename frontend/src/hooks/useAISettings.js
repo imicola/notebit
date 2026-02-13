@@ -20,25 +20,45 @@ export const useAISettings = () => {
   const [ollamaConfig, setOllamaConfig] = useState({
     base_url: '', embedding_model: '', timeout: 30
   });
-  const [chunkingConfig, setChunkingConfig] = useState({
-    strategy: 'heading', chunk_size: 1000, chunk_overlap: 200,
-    min_chunk_size: 100, max_chunk_size: 4000,
-    preserve_heading: true, heading_separator: '\n\n'
-  });
-  const [llmConfig, setLLMConfig] = useState({
-    provider: 'openai', model: 'gpt-4o-mini', temperature: 0.7, max_tokens: 2000
-  });
+  const defaultChunking = {
+    strategy: 'heading',
+    chunk_size: 1000,
+    chunk_overlap: 200,
+    min_chunk_size: 100,
+    max_chunk_size: 4000,
+    preserve_heading: true,
+    heading_separator: '\n\n'
+  };
+  const [chunkingConfig, setChunkingConfig] = useState(defaultChunking);
+  const defaultLLM = {
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    temperature: 0.7,
+    max_tokens: 2000
+  };
+  const [llmConfig, setLLMConfig] = useState(defaultLLM);
   const [llmOpenAIConfig, setLLMOpenAIConfig] = useState({
     api_key: '', base_url: '', organization: ''
   });
-  const [ragConfig, setRAGConfig] = useState({
-    max_context_chunks: 5, temperature: 0.7
-  });
-  const [graphConfig, setGraphConfig] = useState({
-    min_similarity_threshold: 0.75, max_nodes: 100, show_implicit_links: true
-  });
+  const defaultRAG = { max_context_chunks: 5, temperature: 0.7 };
+  const defaultGraph = {
+    min_similarity_threshold: 0.75,
+    max_nodes: 100,
+    show_implicit_links: true
+  };
+  const [ragConfig, setRAGConfig] = useState(defaultRAG);
+  const [graphConfig, setGraphConfig] = useState(defaultGraph);
 
   // Load all settings on mount
+  const toInt = (value, fallback) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  const toFloat = (value, fallback) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
   const loadSettings = useCallback(async () => {
     setLoading(true);
     try {
@@ -56,11 +76,21 @@ export const useAISettings = () => {
       setProvider(aiStatus.current_provider || 'ollama');
       setOpenaiConfig(openai);
       setOllamaConfig(ollama);
-      setChunkingConfig(chunking);
+      setChunkingConfig({
+        strategy: chunking?.strategy || defaultChunking.strategy,
+        chunk_size: chunking?.chunk_size > 0 ? chunking.chunk_size : defaultChunking.chunk_size,
+        chunk_overlap: chunking?.chunk_overlap >= 0 ? chunking.chunk_overlap : defaultChunking.chunk_overlap,
+        min_chunk_size: chunking?.min_chunk_size > 0 ? chunking.min_chunk_size : defaultChunking.min_chunk_size,
+        max_chunk_size: chunking?.max_chunk_size > 0 ? chunking.max_chunk_size : defaultChunking.max_chunk_size,
+        preserve_heading: typeof chunking?.preserve_heading === 'boolean' ? chunking.preserve_heading : defaultChunking.preserve_heading,
+        heading_separator: chunking?.heading_separator || defaultChunking.heading_separator
+      });
 
       setLLMConfig({
-        provider: llm.provider, model: llm.model,
-        temperature: llm.temperature, max_tokens: llm.max_tokens
+        provider: llm?.provider || defaultLLM.provider,
+        model: llm?.model || defaultLLM.model,
+        temperature: Number.isFinite(llm?.temperature) ? llm.temperature : defaultLLM.temperature,
+        max_tokens: llm?.max_tokens > 0 ? llm.max_tokens : defaultLLM.max_tokens
       });
 
       if (llm.openai) {
@@ -71,8 +101,15 @@ export const useAISettings = () => {
         });
       }
 
-      setRAGConfig(rag);
-      setGraphConfig(graph);
+      setRAGConfig({
+        max_context_chunks: rag?.max_context_chunks > 0 ? rag.max_context_chunks : defaultRAG.max_context_chunks,
+        temperature: Number.isFinite(rag?.temperature) ? rag.temperature : defaultRAG.temperature
+      });
+      setGraphConfig({
+        min_similarity_threshold: Number.isFinite(graph?.min_similarity_threshold) ? graph.min_similarity_threshold : defaultGraph.min_similarity_threshold,
+        max_nodes: graph?.max_nodes > 0 ? graph.max_nodes : defaultGraph.max_nodes,
+        show_implicit_links: typeof graph?.show_implicit_links === 'boolean' ? graph.show_implicit_links : defaultGraph.show_implicit_links
+      });
     } catch (error) {
       console.error('Failed to load settings:', error);
     } finally {
@@ -89,28 +126,46 @@ export const useAISettings = () => {
       if (provider === 'openai') {
         await aiService.setOpenAIConfig(openaiConfig.api_key, openaiConfig.base_url, openaiConfig.organization);
       } else {
-        await aiService.setOllamaConfig(ollamaConfig.base_url, ollamaConfig.embedding_model, parseInt(ollamaConfig.timeout));
+        await aiService.setOllamaConfig(
+          ollamaConfig.base_url,
+          ollamaConfig.embedding_model,
+          toInt(ollamaConfig.timeout, 30)
+        );
       }
 
       await aiService.setProvider(provider);
+      const selectedEmbeddingModel = provider === 'openai' ? openaiConfig.embedding_model : ollamaConfig.embedding_model;
+      if (selectedEmbeddingModel) {
+        await aiService.setAIModel(selectedEmbeddingModel);
+      }
 
       await aiService.setChunkingConfig(
         chunkingConfig.strategy,
-        parseInt(chunkingConfig.chunk_size),
-        parseInt(chunkingConfig.chunk_overlap),
-        parseInt(chunkingConfig.min_chunk_size),
-        parseInt(chunkingConfig.max_chunk_size),
+        toInt(chunkingConfig.chunk_size, defaultChunking.chunk_size),
+        toInt(chunkingConfig.chunk_overlap, defaultChunking.chunk_overlap),
+        toInt(chunkingConfig.min_chunk_size, defaultChunking.min_chunk_size),
+        toInt(chunkingConfig.max_chunk_size, defaultChunking.max_chunk_size),
         chunkingConfig.preserve_heading,
         chunkingConfig.heading_separator
       );
 
       await aiService.setLLMConfig(
-        llmConfig.provider, llmConfig.model, llmConfig.temperature, llmConfig.max_tokens,
+        llmConfig.provider,
+        llmConfig.model,
+        toFloat(llmConfig.temperature, defaultLLM.temperature),
+        toInt(llmConfig.max_tokens, defaultLLM.max_tokens),
         llmOpenAIConfig.api_key, llmOpenAIConfig.base_url, llmOpenAIConfig.organization
       );
 
-      await aiService.setRAGConfig(ragConfig.max_context_chunks, ragConfig.temperature);
-      await aiService.setGraphConfig(graphConfig.min_similarity_threshold, graphConfig.max_nodes, graphConfig.show_implicit_links);
+      await aiService.setRAGConfig(
+        toInt(ragConfig.max_context_chunks, defaultRAG.max_context_chunks),
+        toFloat(ragConfig.temperature, defaultRAG.temperature)
+      );
+      await aiService.setGraphConfig(
+        toFloat(graphConfig.min_similarity_threshold, defaultGraph.min_similarity_threshold),
+        toInt(graphConfig.max_nodes, defaultGraph.max_nodes),
+        graphConfig.show_implicit_links
+      );
 
       const newStatus = await aiService.getStatus();
       setStatus(newStatus);

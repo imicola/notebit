@@ -19,7 +19,10 @@ export default function GraphPanel() {
 		setError(null);
 		try {
 			const data = await graphService.getGraphData();
-			setGraphData(data);
+			setGraphData({
+				nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+				links: Array.isArray(data?.links) ? data.links : [],
+			});
 		} catch (err) {
 			console.error('Failed to load graph:', err);
 			setError(err.message || 'Failed to load graph');
@@ -28,10 +31,13 @@ export default function GraphPanel() {
 		}
 	};
 
+	const nodeList = Array.isArray(graphData?.nodes) ? graphData.nodes : [];
+	const linkList = Array.isArray(graphData?.links) ? graphData.links : [];
+
 	useEffect(() => {
-		if (!loading && !error && graphData.nodes.length > 0 && !networkRef.current && containerRef.current) {
+		if (!loading && !error && nodeList.length > 0 && !networkRef.current && containerRef.current) {
 			// Convert to vis-network format
-			const nodes = graphData.nodes.map(node => ({
+			const nodes = nodeList.map(node => ({
 				id: node.id,
 				label: node.label,
 				title: `${node.type}: ${node.label}`,
@@ -48,7 +54,7 @@ export default function GraphPanel() {
 				},
 			}));
 
-			const links = graphData.links.map(link => ({
+			const links = linkList.map(link => ({
 				from: link.source,
 				to: link.target,
 				title: `${link.type} - ${Math.round(link.strength * 100)}%`,
@@ -103,9 +109,9 @@ export default function GraphPanel() {
 
 				// Add node click handler
 				networkRef.current.on('click', (params) => {
-					if (params.nodes.length > 0) {
+					if (params.nodes && params.nodes.length > 0) {
 						const nodeId = params.nodes[0];
-						const node = graphData.nodes.find(n => n.id === nodeId);
+						const node = nodeList.find(n => n.id === nodeId);
 						if (node) {
 							// Emit event to open file in editor
 							window.dispatchEvent(new CustomEvent('open-file', {
@@ -116,7 +122,7 @@ export default function GraphPanel() {
 				});
 			}
 		}
-	}, [graphData, loading, error]); // Removed networkRef from deps as it's a ref
+	}, [nodeList, linkList, loading, error]); // Removed networkRef from deps as it's a ref
 
 	// Cleanup on unmount
 	useEffect(() => {
@@ -137,7 +143,7 @@ export default function GraphPanel() {
 					<h2 className="text-sm font-semibold text-normal">Knowledge Graph</h2>
 				</div>
 				<div className="text-xs text-muted">
-					{graphData.nodes.length} nodes, {graphData.links.length} links
+					{nodeList.length} nodes, {linkList.length} links
 				</div>
 			</div>
 
@@ -158,7 +164,7 @@ export default function GraphPanel() {
 			)}
 
 			{/* Legend */}
-			{!loading && !error && graphData.nodes.length > 0 && (
+			{!loading && !error && nodeList.length > 0 && (
 				<div className="px-4 py-2 bg-primary-alt/50 border-b border-modifier-border flex gap-4">
 					<div className="flex items-center gap-2">
 						<div className="w-3 h-3 rounded-full bg-obsidian-purple"></div>
@@ -176,7 +182,7 @@ export default function GraphPanel() {
 			)}
 
 			{/* Empty state */}
-			{!loading && !error && graphData.nodes.length === 0 && (
+			{!loading && !error && nodeList.length === 0 && (
 				<div className="flex flex-col items-center justify-center h-full text-center">
 					<Globe className="text-faint mb-4" size={48} />
 					<h3 className="text-lg font-medium text-muted mb-2">No Graph Data</h3>

@@ -84,41 +84,34 @@ export default function ChatPanel() {
 		try {
 			const response = await ragService.query(trimmed);
 
-			// Find the assistant message and update it
+			// Add or update assistant message
 			setMessages(prev => {
 				const updated = [...prev];
-				const msgIndex = updated.findIndex(m => m.id === userMsg.id);
+				// Check if we already have this message from streaming
+				const msgIndex = updated.findIndex(m => m.id === response.message_id);
+				
 				if (msgIndex >= 0) {
+					// Update existing message (from streaming) with final details
 					updated[msgIndex] = {
 						...updated[msgIndex],
-						...response,
+						content: response.content, // Ensure we have the full content
+						sources: response.sources,
+						tokens_used: response.tokens_used,
 						timestamp: Date.now(),
 					};
 				} else {
+					// Create new assistant message
 					updated.push({
-						id: userMsg.id,
+						id: response.message_id || Date.now().toString(),
 						role: 'assistant',
-						...response,
+						content: response.content,
+						sources: response.sources,
+						tokens_used: response.tokens_used,
 						timestamp: Date.now(),
 					});
 				}
 				return updated;
 			});
-
-			// Process sources
-			if (response.sources && response.sources.length > 0) {
-				setMessages(prev => {
-					const updated = [...prev];
-					const msgIndex = updated.findIndex(m => m.id === userMsg.id);
-					if (msgIndex >= 0) {
-						updated[msgIndex] = {
-							...updated[msgIndex],
-							sources: response.sources,
-						};
-					}
-					return updated;
-				});
-			}
 		} catch (err) {
 			console.error('Query failed:', err);
 			setMessages(prev => [...prev, {

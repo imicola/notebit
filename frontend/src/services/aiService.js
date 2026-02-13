@@ -9,6 +9,7 @@ import {
   GetOllamaConfig,
   SetOllamaConfig,
   SetAIProvider,
+  SetAIModel,
   GetChunkingConfig,
   SetChunkingConfig,
   TestOpenAIConnection,
@@ -56,12 +57,12 @@ export const aiService = {
     return wrapCall('getOpenAIConfig', GetOpenAIConfig);
   },
 
-  async setOpenAIConfig(config) {
-    return wrapCall('setOpenAIConfig', () => SetOpenAIConfig(config));
+  async setOpenAIConfig(apiKey, baseURL, organization) {
+    return wrapCall('setOpenAIConfig', () => SetOpenAIConfig(apiKey, baseURL, organization));
   },
 
-  async testOpenAIConnection() {
-    return wrapCall('testOpenAIConnection', TestOpenAIConnection);
+  async testOpenAIConnection(apiKey, baseURL, organization, model) {
+    return wrapCall('testOpenAIConnection', () => TestOpenAIConnection(apiKey, baseURL, organization, model));
   },
 
   // --- Ollama ---
@@ -69,8 +70,8 @@ export const aiService = {
     return wrapCall('getOllamaConfig', GetOllamaConfig);
   },
 
-  async setOllamaConfig(config) {
-    return wrapCall('setOllamaConfig', () => SetOllamaConfig(config));
+  async setOllamaConfig(baseURL, model, timeout) {
+    return wrapCall('setOllamaConfig', () => SetOllamaConfig(baseURL, model, timeout));
   },
 
   // --- Provider ---
@@ -78,13 +79,25 @@ export const aiService = {
     return wrapCall('setAIProvider', () => SetAIProvider(provider));
   },
 
+  async setAIModel(model) {
+    return wrapCall('setAIModel', () => SetAIModel(model));
+  },
+
   // --- Chunking ---
   async getChunkingConfig() {
     return wrapCall('getChunkingConfig', GetChunkingConfig);
   },
 
-  async setChunkingConfig(config) {
-    return wrapCall('setChunkingConfig', () => SetChunkingConfig(config));
+  async setChunkingConfig(strategy, chunkSize, chunkOverlap, minChunkSize, maxChunkSize, preserveHeading, headingSeparator) {
+    return wrapCall('setChunkingConfig', () => SetChunkingConfig(
+      strategy,
+      chunkSize,
+      chunkOverlap,
+      minChunkSize,
+      maxChunkSize,
+      preserveHeading,
+      headingSeparator
+    ));
   },
 
   // --- LLM ---
@@ -92,8 +105,16 @@ export const aiService = {
     return wrapCall('getLLMConfig', GetLLMConfig);
   },
 
-  async setLLMConfig(config) {
-    return wrapCall('setLLMConfig', () => SetLLMConfig(config));
+  async setLLMConfig(provider, model, temperature, maxTokens, apiKey, baseURL, organization) {
+    return wrapCall('setLLMConfig', () => SetLLMConfig(
+      provider,
+      model,
+      temperature,
+      maxTokens,
+      apiKey,
+      baseURL,
+      organization
+    ));
   },
 
   // --- RAG ---
@@ -101,8 +122,8 @@ export const aiService = {
     return wrapCall('getRAGConfig', GetRAGConfig);
   },
 
-  async setRAGConfig(config) {
-    return wrapCall('setRAGConfig', () => SetRAGConfig(config));
+  async setRAGConfig(maxContextChunks, temperature) {
+    return wrapCall('setRAGConfig', () => SetRAGConfig(maxContextChunks, temperature, ''));
   },
 
   // --- Graph Config ---
@@ -110,8 +131,8 @@ export const aiService = {
     return wrapCall('getGraphConfig', GetGraphConfig);
   },
 
-  async setGraphConfig(config) {
-    return wrapCall('setGraphConfig', () => SetGraphConfig(config));
+  async setGraphConfig(minSimilarityThreshold, maxNodes, showImplicitLinks) {
+    return wrapCall('setGraphConfig', () => SetGraphConfig(minSimilarityThreshold, maxNodes, showImplicitLinks));
   },
 };
 

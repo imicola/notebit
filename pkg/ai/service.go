@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -57,7 +58,7 @@ func (s *Service) Initialize() error {
 			s.providers["openai"] = provider
 			logger.Debug("OpenAI provider initialized")
 		} else {
-			logger.WarnWithFields(nil, map[string]interface{}{"error": err.Error()}, "Failed to initialize OpenAI provider")
+			logger.WarnWithFields(context.TODO(), map[string]interface{}{"error": err.Error()}, "Failed to initialize OpenAI provider")
 		}
 	}
 
@@ -70,12 +71,12 @@ func (s *Service) Initialize() error {
 	})
 	if err == nil {
 		s.providers["ollama"] = provider
-		logger.DebugWithFields(nil, map[string]interface{}{
+		logger.DebugWithFields(context.TODO(), map[string]interface{}{
 			"base_url": ollamaCfg.BaseURL,
 			"model":    ollamaCfg.EmbeddingModel,
 		}, "Ollama provider initialized")
 	} else {
-		logger.WarnWithFields(nil, map[string]interface{}{"error": err.Error()}, "Failed to initialize Ollama provider")
+		logger.WarnWithFields(context.TODO(), map[string]interface{}{"error": err.Error()}, "Failed to initialize Ollama provider")
 	}
 
 	// Initialize chunkers
@@ -120,7 +121,7 @@ func (s *Service) Initialize() error {
 		}
 	}
 
-	logger.InfoWithDuration(nil, timer(), "AI service initialized with %d providers", len(s.providers))
+	logger.InfoWithDuration(context.TODO(), timer(), "AI service initialized with %d providers", len(s.providers))
 	return nil
 }
 

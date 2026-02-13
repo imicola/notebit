@@ -44,6 +44,8 @@ func (a *App) OpenFolder() (string, error) {
 		// Don't fail if database initialization fails - log but continue
 		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Database initialization failed")
 	}
+	a.initializeRAG()
+	a.initializeGraph()
 
 	// Start watcher for new folder
 	if err := a.startWatcher(); err != nil {
@@ -69,6 +71,8 @@ func (a *App) SetFolder(path string) error {
 		// Don't fail if database initialization fails
 		logger.Warn("Warning: database initialization failed: %v", err)
 	}
+	a.initializeRAG()
+	a.initializeGraph()
 
 	// Start watcher for new folder
 	if err := a.startWatcher(); err != nil {

@@ -26,6 +26,7 @@ Thumbs.db
 # 日志
 *.log
 logs/
+agent/User log/
 
 # 环境变量
 .env

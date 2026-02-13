@@ -30,7 +30,11 @@ export const graphService = {
    * @returns {Promise<{nodes: Array, links: Array}>} Graph data
    */
   async getGraphData() {
-    return wrapCall('getGraphData', GetGraphData);
+    const data = await wrapCall('getGraphData', GetGraphData);
+    return {
+      nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+      links: Array.isArray(data?.links) ? data.links : [],
+    };
   },
 };
 
