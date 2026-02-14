@@ -22,6 +22,10 @@ type SimilarNote struct {
 
 // FindSimilar finds semantically similar notes based on content
 func (a *App) FindSimilar(content string, limit int) ([]SimilarNote, error) {
+	if a.ks == nil {
+		return nil, fmt.Errorf("knowledge service not initialized - please open a folder first")
+	}
+
 	results, err := a.ks.FindSimilar(content, limit)
 	if err != nil {
 		return nil, err
@@ -44,6 +48,24 @@ func (a *App) FindSimilar(content string, limit int) ([]SimilarNote, error) {
 
 // GetSimilarityStatus returns the availability status of semantic search
 func (a *App) GetSimilarityStatus() (map[string]interface{}, error) {
+	if a.ks == nil {
+		vectorEngine := "unknown"
+		if a.dbm.IsInitialized() && a.dbm.Repository() != nil {
+			engine := a.dbm.Repository().GetVectorEngine()
+			if engine != "" {
+				vectorEngine = engine
+			}
+		}
+		return map[string]interface{}{
+			"available":      false,
+			"db_initialized": a.dbm.IsInitialized(),
+			"ai_healthy":     false,
+			"indexed_chunks": 0,
+			"total_chunks":   0,
+			"vector_engine":  vectorEngine,
+		}, nil
+	}
+
 	return a.ks.GetSimilarityStatus()
 }
 

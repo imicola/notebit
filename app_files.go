@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
+	"notebit/pkg/indexing"
 	"notebit/pkg/logger"
-	"os"
-	"path/filepath"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -113,7 +112,7 @@ func (a *App) SaveFile(path, content string) error {
 
 	// Index the file in database after saving (pass content to avoid re-reading)
 	if a.dbm.IsInitialized() {
-		a.enqueueIndexFileContent(path, content)
+		go a.indexFileContent(path, content)
 	}
 
 	logger.InfoWithDuration(a.ctx, timer(), "File saved: %s", path)
@@ -129,7 +128,7 @@ func (a *App) CreateFile(path, content string) error {
 
 	// Index the file in database after creating (pass content to avoid re-reading)
 	if a.dbm.IsInitialized() {
-		a.enqueueIndexFileContent(path, content)
+		go a.indexFileContent(path, content)
 	}
 
 	return nil
@@ -209,100 +208,16 @@ func (a *App) indexFile(path string) error {
 
 // indexFileContent indexes a file with given content (avoids re-reading file)
 func (a *App) indexFileContent(path, content string) error {
-	timer := logger.StartTimer()
-
-	if !a.dbm.IsInitialized() {
-		return fmt.Errorf("database not initialized")
+	if a.pipeline == nil {
+		return fmt.Errorf("indexing pipeline not initialized")
 	}
 
-	// Get file stats
-	fullPath := filepath.Join(a.fm.GetBasePath(), path)
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		logger.ErrorWithFields(a.ctx, map[string]interface{}{
-			"path":  path,
-			"error": err.Error(),
-		}, "Failed to stat file")
-		runtime.LogErrorf(a.ctx, "Failed to stat file %s: %v", path, err)
-		return err
-	}
-
-	if err := a.indexFileWithEmbeddings(path, content, info.ModTime().Unix(), info.Size()); err != nil {
-		logger.ErrorWithFields(a.ctx, map[string]interface{}{
-			"path":  path,
-			"error": err.Error(),
-		}, "Failed to index file")
-		runtime.LogErrorf(a.ctx, "Failed to index file %s: %v", path, err)
-		return err
-	}
-
-	logger.DebugWithDuration(a.ctx, timer(), "File indexed: %s", path)
+	// Queue for async indexing with fallback
+	a.pipeline.Enqueue(path, content, indexing.IndexOptions{
+		SkipIfUnchanged:        true,
+		FallbackToMetadataOnly: true,
+	})
 	return nil
-}
-
-// indexFileWithEmbeddings indexes file metadata + chunks/embeddings in one path.
-// Falls back to metadata-only indexing when AI processing is unavailable.
-func (a *App) indexFileWithEmbeddings(path, content string, modTime, size int64) error {
-	repo := a.dbm.Repository()
-
-	chunks, err := a.ai.ProcessDocument(content)
-	if err != nil {
-		logger.WarnWithFields(a.ctx, map[string]interface{}{
-			"path":  path,
-			"error": err.Error(),
-		}, "Embedding processing failed, fallback to metadata-only index")
-		bareChunks, chunkErr := a.ai.ChunkText(content)
-		if chunkErr != nil {
-			return repo.IndexFile(path, content, modTime, size)
-		}
-		dbChunks := make([]database.ChunkInput, len(bareChunks))
-		for i, chunk := range bareChunks {
-			dbChunks[i] = database.ChunkInput{
-				Content: chunk.Content,
-				Heading: chunk.Heading,
-			}
-		}
-		return repo.IndexFileWithChunks(path, content, modTime, size, dbChunks)
-	}
-
-	dbChunks := make([]database.ChunkInput, len(chunks))
-	for i, chunk := range chunks {
-		dbChunks[i] = database.ChunkInput{
-			Content: chunk.Content,
-			Heading: chunk.Heading,
-		}
-		if embedding, ok := chunk.Metadata["embedding"].([]float32); ok {
-			dbChunks[i].Embedding = embedding
-		}
-		if model, ok := chunk.Metadata["embedding_model"].(string); ok {
-			dbChunks[i].EmbeddingModel = model
-		}
-	}
-
-	return repo.IndexFileWithChunks(path, content, modTime, size, dbChunks)
-}
-
-func (a *App) startIndexWorkers(count int) {
-	if count <= 0 {
-		count = 1
-	}
-	for i := 0; i < count; i++ {
-		go a.indexWorker()
-	}
-}
-
-func (a *App) indexWorker() {
-	for job := range a.indexQueue {
-		_ = a.indexFileContent(job.path, job.content)
-	}
-}
-
-func (a *App) enqueueIndexFileContent(path, content string) {
-	if a.indexQueue == nil {
-		go a.indexFileContent(path, content)
-		return
-	}
-	a.indexQueue <- indexJob{path: path, content: content}
 }
 
 // ============ DATABASE API METHODS ============

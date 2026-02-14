@@ -150,6 +150,7 @@ export namespace database {
 	    embedding_model: string;
 	    // Go type: time
 	    embedding_created_at?: any;
+	    vec_indexed: boolean;
 	    embedding_dim?: number;
 	
 	    static createFrom(source: any = {}) {
@@ -167,6 +168,7 @@ export namespace database {
 	        this.embedding = source["embedding"];
 	        this.embedding_model = source["embedding_model"];
 	        this.embedding_created_at = this.convertValues(source["embedding_created_at"], null);
+	        this.vec_indexed = source["vec_indexed"];
 	        this.embedding_dim = source["embedding_dim"];
 	    }
 	

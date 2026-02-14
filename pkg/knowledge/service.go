@@ -1,81 +1,50 @@
 package knowledge
 
 import (
+	"context"
 	"fmt"
 	"notebit/pkg/ai"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
-	"os"
-	"path/filepath"
+	"notebit/pkg/indexing"
 )
 
 const maxFindSimilarContentLength = 8000
 
 // Service handles knowledge base operations (indexing, search)
 type Service struct {
-	fm  *files.Manager
-	dbm *database.Manager
-	ai  *ai.Service
+	fm       *files.Manager
+	dbm      *database.Manager
+	ai       *ai.Service
+	pipeline *indexing.IndexingPipeline
 }
 
 // NewService creates a new knowledge service
-func NewService(fm *files.Manager, dbm *database.Manager, ai *ai.Service) *Service {
+func NewService(fm *files.Manager, dbm *database.Manager, ai *ai.Service, pipeline *indexing.IndexingPipeline) *Service {
 	return &Service{
-		fm:  fm,
-		dbm: dbm,
-		ai:  ai,
+		fm:       fm,
+		dbm:      dbm,
+		ai:       ai,
+		pipeline: pipeline,
 	}
 }
 
 // IndexFileWithEmbedding indexes a file and generates embeddings for its chunks
 func (s *Service) IndexFileWithEmbedding(path string) error {
-	if !s.dbm.IsInitialized() {
-		return fmt.Errorf("database not initialized")
+	if s.pipeline == nil {
+		return fmt.Errorf("indexing pipeline not initialized")
 	}
 
-	// Read file content
-	content, err := s.fm.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	// Get file stats
-	fullPath := filepath.Join(s.fm.GetBasePath(), path)
-	info, err := os.Stat(fullPath)
-	if err != nil {
-		return err
-	}
-
-	// Process document to get chunks with embeddings
-	chunks, err := s.ai.ProcessDocument(content.Content)
-	if err != nil {
-		return fmt.Errorf("failed to process document: %w", err)
-	}
-
-	// Convert chunks to database format
-	dbChunks := make([]database.ChunkInput, len(chunks))
-	for i, chunk := range chunks {
-		dbChunks[i] = database.ChunkInput{
-			Content: chunk.Content,
-			Heading: chunk.Heading,
-		}
-		if embedding, ok := chunk.Metadata["embedding"].([]float32); ok {
-			dbChunks[i].Embedding = embedding
-		}
-		if model, ok := chunk.Metadata["embedding_model"].(string); ok {
-			dbChunks[i].EmbeddingModel = model
-		}
-	}
-
-	// Index with embeddings
-	repo := s.dbm.Repository()
-	return repo.IndexFileWithChunks(path, content.Content, info.ModTime().Unix(), info.Size(), dbChunks)
+	return s.pipeline.IndexFile(context.Background(), path, indexing.IndexOptions{
+		ForceReindex:           true,
+		FallbackToMetadataOnly: true,
+	})
 }
 
 // ReindexAllWithEmbeddings reindexes all files with embeddings
 func (s *Service) ReindexAllWithEmbeddings() (map[string]interface{}, error) {
-	if !s.dbm.IsInitialized() {
-		return nil, fmt.Errorf("database not initialized")
+	if s.pipeline == nil {
+		return nil, fmt.Errorf("indexing pipeline not initialized")
 	}
 
 	filesList, err := s.fm.ListFiles()
@@ -87,24 +56,23 @@ func (s *Service) ReindexAllWithEmbeddings() (map[string]interface{}, error) {
 	var mdFiles []string
 	collectFiles(filesList, &mdFiles)
 
-	results := map[string]interface{}{
-		"total":     len(mdFiles),
-		"processed": 0,
-		"failed":    0,
-		"errors":    []string{},
+	// Use pipeline's IndexAll for batch processing
+	progress, err := s.pipeline.IndexAll(context.Background(), mdFiles, indexing.IndexOptions{
+		ForceReindex:           true,
+		FallbackToMetadataOnly: true,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	for _, path := range mdFiles {
-		if err := s.IndexFileWithEmbedding(path); err != nil {
-			results["failed"] = results["failed"].(int) + 1
-			errs := results["errors"].([]string)
-			results["errors"] = append(errs, fmt.Sprintf("%s: %v", path, err))
-		} else {
-			results["processed"] = results["processed"].(int) + 1
-		}
-	}
+	// Wait for completion
+	<-progress.Done
 
-	return results, nil
+	return map[string]interface{}{
+		"total":     progress.Total,
+		"processed": progress.Processed,
+		"failed":    progress.Errors,
+	}, nil
 }
 
 // collectFiles recursively collects all markdown file paths
@@ -197,13 +165,16 @@ func (s *Service) GetSimilarityStatus() (map[string]interface{}, error) {
 
 	var embeddedChunks int64
 	var totalChunks int64
-	vectorEngine := ""
+	vectorEngine := "unknown"
 	if stats != nil {
 		embeddedChunks = stats.EmbeddedChunks
 		totalChunks = stats.TotalChunks
 	}
-	if dbInitialized {
-		vectorEngine = s.dbm.Repository().GetVectorEngine()
+	if dbInitialized && s.dbm.Repository() != nil {
+		engine := s.dbm.Repository().GetVectorEngine()
+		if engine != "" {
+			vectorEngine = engine
+		}
 	}
 
 	return map[string]interface{}{

@@ -215,12 +215,6 @@ func (s *Service) extractTagLinks(files []database.File) []Link {
 
 // extractWikiLinks parses markdown for [[wiki]] links
 func (s *Service) extractWikiLinks(files []database.File) []Link {
-	// Build path -> file map for quick lookup
-	fileMap := make(map[string]*database.File)
-	for i := range files {
-		fileMap[files[i].Path] = &files[i]
-	}
-
 	var links []Link
 
 	for _, file := range files {
@@ -271,17 +265,18 @@ func (s *Service) extractWikiLinks(files []database.File) []Link {
 func (s *Service) extractImplicitLinks(files []database.File, repo *database.Repository, threshold float32) []Link {
 	var links []Link
 
-	// For each file, find semantically similar files
+	queryVectors := make([][]float32, 0, len(files))
+	queryPaths := make([]string, 0, len(files))
 	for _, file := range files {
 		if len(file.Chunks) == 0 {
 			continue
 		}
 
-		// Get first chunk as representative (or find the chunk with embedding)
 		var embedding []float32
 		for _, chunk := range file.Chunks {
-			if len(chunk.Embedding) > 0 {
-				embedding = chunk.Embedding
+			emb := chunk.GetEmbedding()
+			if len(emb) > 0 {
+				embedding = emb
 				break
 			}
 		}
@@ -290,26 +285,37 @@ func (s *Service) extractImplicitLinks(files []database.File, repo *database.Rep
 			continue
 		}
 
-		// Search for similar files
-		similar, err := repo.SearchSimilar(embedding, 10)
-		if err != nil {
-			continue
-		}
+		queryVectors = append(queryVectors, embedding)
+		queryPaths = append(queryPaths, file.Path)
+	}
 
+	if len(queryVectors) == 0 {
+		return links
+	}
+
+	batchResults, err := repo.SearchSimilarBatch(queryVectors, 10)
+	if err != nil {
+		return links
+	}
+
+	for i, similar := range batchResults {
+		sourcePath := queryPaths[i]
 		for _, sim := range similar {
-			// Skip self and low similarity
-			if sim.File.Path == file.Path || sim.Similarity < threshold {
+			if sim.File == nil {
+				continue
+			}
+
+			if sim.File.Path == sourcePath || sim.Similarity < threshold {
 				continue
 			}
 
 			link := Link{
-				Source:   generateNodeID("file", file.Path),
+				Source:   generateNodeID("file", sourcePath),
 				Target:   generateNodeID("file", sim.File.Path),
 				Type:     "implicit",
 				Strength: sim.Similarity,
 			}
 
-			// Avoid duplicate links
 			if !linkExists(links, link) {
 				links = append(links, link)
 			}

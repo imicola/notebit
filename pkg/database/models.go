@@ -50,12 +50,31 @@ type Chunk struct {
 	EmbeddingBlob      []byte     `gorm:"type:blob" json:"-"`                         // Optimized: Binary storage for fast retrieval
 	EmbeddingModel     string     `gorm:"size:64" json:"embedding_model"`             // Model name/version
 	EmbeddingCreatedAt *time.Time `json:"embedding_created_at"`                       // NULL until embedded
+	VecIndexed         bool       `gorm:"index;default:false" json:"vec_indexed"`     // Whether embedding is written to vec_chunks
 	EmbeddingDim       int        `gorm:"-" json:"embedding_dim,omitempty"`           // Computed field for UI
 }
 
 // TableName specifies the table name for Chunk
 func (Chunk) TableName() string {
 	return "chunks"
+}
+
+// GetEmbedding returns the embedding vector from either blob or JSON field
+// Returns nil if no valid embedding is found
+func (c *Chunk) GetEmbedding() []float32 {
+	// Prefer EmbeddingBlob (optimized binary format)
+	if len(c.EmbeddingBlob) > 0 {
+		vec := bytesToFloats(c.EmbeddingBlob)
+		if len(vec) > 0 {
+			return vec
+		}
+		// Blob is malformed or empty, fall through to JSON
+	}
+	// Fallback to legacy JSON field
+	if len(c.Embedding) > 0 {
+		return c.Embedding
+	}
+	return nil
 }
 
 // Tag represents a tag that can be associated with files

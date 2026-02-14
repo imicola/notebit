@@ -56,10 +56,12 @@ type EmbeddingProvider interface {
 
 // TextChunk represents a segment of text with metadata
 type TextChunk struct {
-	Content  string                 // The chunk content
-	Heading  string                 // Associated heading (if any)
-	Index    int                    // Position in the original text
-	Metadata map[string]interface{} // Additional metadata
+	Content   string                 // The chunk content
+	Heading   string                 // Associated heading (if any)
+	Index     int                    // Position in the original text
+	Metadata  map[string]interface{} // Additional metadata
+	Embedding []float32              // Vector embedding (populated after processing)
+	ModelName string                 // Model used to generate embedding
 }
 
 // ChunkingStrategy defines the interface for text chunking strategies

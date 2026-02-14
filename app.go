@@ -8,6 +8,7 @@ import (
 	"notebit/pkg/database"
 	"notebit/pkg/files"
 	"notebit/pkg/graph"
+	"notebit/pkg/indexing"
 	"notebit/pkg/knowledge"
 	"notebit/pkg/logger"
 	"notebit/pkg/rag"
@@ -21,22 +22,17 @@ import (
 
 // App struct
 type App struct {
-	ctx        context.Context
-	fm         *files.Manager
-	dbm        *database.Manager
-	ai         *ai.Service
-	ks         *knowledge.Service
-	cfg        *config.Config
-	watcher    *watcher.Service
-	rag        *rag.Service
-	graph      *graph.Service
-	llm        ai.LLMProvider
-	indexQueue chan indexJob
-}
-
-type indexJob struct {
-	path    string
-	content string
+	ctx      context.Context
+	fm       *files.Manager
+	dbm      *database.Manager
+	ai       *ai.Service
+	ks       *knowledge.Service
+	cfg      *config.Config
+	watcher  *watcher.Service
+	rag      *rag.Service
+	graph    *graph.Service
+	llm      ai.LLMProvider
+	pipeline *indexing.IndexingPipeline
 }
 
 type watcherLogger struct {
@@ -61,14 +57,11 @@ func NewAppWithConfig(cfg *config.Config) *App {
 	aiService := ai.NewService(cfg)
 
 	app := &App{
-		fm:         fm,
-		dbm:        dbm,
-		cfg:        cfg,
-		ai:         aiService,
-		ks:         knowledge.NewService(fm, dbm, aiService),
-		indexQueue: make(chan indexJob, 128),
+		fm:  fm,
+		dbm: dbm,
+		cfg: cfg,
+		ai:  aiService,
 	}
-	app.startIndexWorkers(4)
 	return app
 }
 
@@ -86,6 +79,13 @@ func (a *App) startup(ctx context.Context) {
 
 	a.initializeAI()
 	a.initializeLLM()
+
+	// Initialize indexing pipeline after database is ready
+	if a.dbm.IsInitialized() {
+		a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
+		a.pipeline.Start()
+		a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+	}
 
 	// Start file watcher if database is initialized and base path is set
 	if a.dbm.IsInitialized() && a.fm.GetBasePath() != "" {
@@ -211,8 +211,12 @@ func (a *App) startWatcher() error {
 		return fmt.Errorf("no base path set")
 	}
 
+	if a.pipeline == nil {
+		return fmt.Errorf("indexing pipeline not initialized")
+	}
+
 	var err error
-	a.watcher, err = watcher.NewService(baseDir, a.fm, a.dbm, a.ai)
+	a.watcher, err = watcher.NewService(baseDir, a.pipeline)
 	if err != nil {
 		return fmt.Errorf("failed to create watcher: %w", err)
 	}
@@ -250,27 +254,23 @@ func (a *App) runFullIndex() {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	defer cancel()
+	if a.ks == nil {
+		a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+	}
 
-	progress, err := a.watcher.IndexAll(ctx)
+	results, err := a.ks.ReindexAllWithEmbeddings()
 	if err != nil {
 		runtime.LogErrorf(a.ctx, "Full index failed: %v", err)
 		return
 	}
 
-	// Wait for completion
-	<-progress.Done
-
-	total, processed, failed, _ := progress.GetProgress()
-	runtime.LogInfof(a.ctx, "Full index complete: %d total, %d processed, %d failed", total, processed, failed)
+	runtime.LogInfof(a.ctx, "Full index complete: %v", results)
 }
 
 // shutdown is called when the app is shutting down
 func (a *App) shutdown(context.Context) {
 	a.stopWatcher()
-	if a.indexQueue != nil {
-		close(a.indexQueue)
-		a.indexQueue = nil
+	if a.pipeline != nil {
+		a.pipeline.Stop()
 	}
 }

@@ -30,6 +30,9 @@ type Config struct {
 
 	// Graph Configuration
 	Graph GraphConfig `json:"graph"`
+
+	// Indexing Configuration
+	Indexing IndexingConfig `json:"indexing"`
 }
 
 // AIConfig holds AI service configuration
@@ -51,6 +54,9 @@ type AIConfig struct {
 
 	// VectorSearchEngine controls vector retrieval backend (e.g. "brute-force", "sqlite-vec")
 	VectorSearchEngine string `json:"vector_search_engine"`
+
+	// VectorDimension is the dimension of embeddings (default: 1536 for text-embedding-3-small)
+	VectorDimension int `json:"vector_dimension"`
 }
 
 // OpenAIConfig holds OpenAI-specific configuration
@@ -164,6 +170,18 @@ type GraphConfig struct {
 	ShowImplicitLinks bool `json:"show_implicit_links"`
 }
 
+// IndexingConfig holds indexing pipeline configuration
+type IndexingConfig struct {
+	// WorkerCount is the number of concurrent indexing workers
+	WorkerCount int `json:"worker_count"`
+
+	// QueueSize is the size of the indexing queue buffer
+	QueueSize int `json:"queue_size"`
+
+	// MigrationBatchSize is the number of chunks to migrate in one batch
+	MigrationBatchSize int `json:"migration_batch_size"`
+}
+
 var (
 	globalConfig *Config
 	once         sync.Once
@@ -192,6 +210,7 @@ func (c *Config) setDefaults() {
 	c.AI.Provider = "ollama" // Default to local-first approach
 	c.AI.BatchSize = 32
 	c.AI.VectorSearchEngine = "brute-force"
+	c.AI.VectorDimension = 1536 // Default for text-embedding-3-small
 
 	// OpenAI Defaults
 	c.AI.OpenAI.EmbeddingModel = "text-embedding-3-small"
@@ -235,6 +254,11 @@ func (c *Config) setDefaults() {
 	c.Graph.MinSimilarityThreshold = 0.75
 	c.Graph.MaxNodes = 100
 	c.Graph.ShowImplicitLinks = true
+
+	// Indexing Defaults
+	c.Indexing.WorkerCount = 4
+	c.Indexing.QueueSize = 100
+	c.Indexing.MigrationBatchSize = 500
 }
 
 // LoadFromFile loads configuration from a JSON file

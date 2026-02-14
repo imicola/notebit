@@ -6,20 +6,18 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
+
+	"notebit/pkg/logger"
 
 	"gorm.io/gorm"
 )
 
 // Repository provides data access methods
 type Repository struct {
-	db                *gorm.DB
-	vectorCache       map[uint][]float32
-	vectorCacheLoaded bool
-	vectorCacheMu     sync.RWMutex
-	vectorEngine      VectorSearchEngine
-	revision          atomic.Uint64
+	db           *gorm.DB
+	vectorEngine VectorSearchEngine
+	revision     atomic.Uint64
 }
 
 // NewRepository creates a new repository
@@ -28,6 +26,9 @@ func (m *Manager) Repository() *Repository {
 	defer m.mu.Unlock()
 	if m.repo == nil {
 		m.repo = &Repository{db: m.db}
+		m.repo.vectorEngine = NewBruteForceVectorEngine()
+	} else if m.repo.vectorEngine == nil {
+		// Ensure vectorEngine is always initialized
 		m.repo.vectorEngine = NewBruteForceVectorEngine()
 	}
 	return m.repo
@@ -93,9 +94,18 @@ func (r *Repository) ListFilesWithChunks() ([]File, error) {
 
 // DeleteFile removes a file from the index (cascade deletes chunks)
 func (r *Repository) DeleteFile(path string) error {
+	var chunkIDs []uint
+	_ = r.db.Model(&Chunk{}).
+		Joins("JOIN files ON files.id = chunks.file_id").
+		Where("files.path = ?", path).
+		Pluck("chunks.id", &chunkIDs).Error
+
+	if len(chunkIDs) > 0 {
+		_ = r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", chunkIDs).Error
+	}
+
 	err := r.db.Where("path = ?", path).Delete(&File{}).Error
 	if err == nil {
-		r.invalidateVectorCache()
 		r.revision.Add(1)
 	}
 	return err
@@ -156,29 +166,6 @@ func (r *Repository) FileNeedsIndexing(path string, content string) (bool, error
 
 // ============ CHUNK OPERATIONS ============
 
-// CreateChunks creates chunks for a file (for future vectorization)
-func (r *Repository) CreateChunks(fileID uint, chunks []Chunk) error {
-	// Delete existing chunks for this file
-	if err := r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error; err != nil {
-		return err
-	}
-
-	// Create new chunks
-	for i := range chunks {
-		chunks[i].FileID = fileID
-		// chunks[i].ChunkIndex = i
-	}
-
-	if len(chunks) > 0 {
-		if err := r.db.Create(&chunks).Error; err != nil {
-			return err
-		}
-	}
-	r.invalidateVectorCache()
-	r.revision.Add(1)
-	return nil
-}
-
 // GetChunksByFileID retrieves all chunks for a file
 func (r *Repository) GetChunksByFileID(fileID uint) ([]Chunk, error) {
 	var chunks []Chunk
@@ -198,9 +185,14 @@ func (r *Repository) GetChunkByID(chunkID uint) (*Chunk, error) {
 
 // DeleteChunksForFile removes all chunks associated with a file
 func (r *Repository) DeleteChunksForFile(fileID uint) error {
+	var oldIDs []uint
+	_ = r.db.Model(&Chunk{}).Where("file_id = ?", fileID).Pluck("id", &oldIDs).Error
+	if len(oldIDs) > 0 {
+		_ = r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", oldIDs).Error
+	}
+
 	err := r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error
 	if err == nil {
-		r.invalidateVectorCache()
 		r.revision.Add(1)
 	}
 	return err
@@ -350,11 +342,25 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 		return err
 	}
 
-	// Delete existing chunks for this file
+	var existingChunkIDs []uint
+	if err := tx.Model(&Chunk{}).Where("file_id = ?", file.ID).Pluck("id", &existingChunkIDs).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if len(existingChunkIDs) > 0 {
+		if err := tx.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", existingChunkIDs).Error; err != nil {
+			logger.Warn("failed to delete old vec_chunks rows: %v", err)
+		}
+	}
+
 	if err := tx.Where("file_id = ?", file.ID).Delete(&Chunk{}).Error; err != nil {
 		tx.Rollback()
 		return err
 	}
+
+	var vecTableExists bool
+	_ = tx.Raw("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='vec_chunks'").Scan(&vecTableExists).Error
 
 	// Create new chunks with embeddings
 	now := r.db.NowFunc()
@@ -371,11 +377,22 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 		if len(chunkInput.Embedding) > 0 {
 			chunk.EmbeddingCreatedAt = &now
 			chunk.EmbeddingBlob = floatsToBytes(chunkInput.Embedding)
+			chunk.VecIndexed = false
 		}
 
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
+		}
+
+		if vecTableExists && len(chunkInput.Embedding) > 0 {
+			if err := insertVecChunk(tx, chunk.ID, chunkInput.Embedding); err != nil {
+				// Log with higher visibility - production systems should monitor this
+				logger.Warn("[VECTOR_INDEX] Failed to insert vec chunk %d, vector search acceleration disabled for this chunk: %v", chunk.ID, err)
+				// TODO: Add metric counter for vec_insert_failures
+			} else if err := tx.Model(&Chunk{}).Where("id = ?", chunk.ID).Update("vec_indexed", true).Error; err != nil {
+				logger.Warn("[VECTOR_INDEX] Failed to mark vec_indexed for chunk %d: %v", chunk.ID, err)
+			}
 		}
 	}
 
@@ -383,7 +400,6 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
-	r.invalidateVectorCache()
 	r.revision.Add(1)
 	return nil
 }

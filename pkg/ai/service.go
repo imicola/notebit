@@ -305,6 +305,8 @@ func (s *Service) ProcessDocument(text string) ([]TextChunk, error) {
 	// Attach embeddings to chunks
 	for i, emb := range embeddings {
 		if i < len(chunks) && emb != nil {
+			chunks[i].Embedding = emb.Embedding
+			chunks[i].ModelName = emb.Model
 			if chunks[i].Metadata == nil {
 				chunks[i].Metadata = make(map[string]interface{})
 			}

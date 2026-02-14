@@ -2,15 +2,23 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"notebit/pkg/logger"
 
-	"github.com/glebarez/sqlite"
+	sqlite3 "github.com/mattn/go-sqlite3"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+)
+
+const (
+	defaultSQLiteDriver = "sqlite3"
+	vecSQLiteDriver     = "sqlite3_vec"
 )
 
 // Manager handles database operations
@@ -26,6 +34,9 @@ type Manager struct {
 var (
 	instance *Manager
 	once     sync.Once
+
+	registerVecDriverOnce sync.Once
+	vecDriverAvailable    bool
 )
 
 // GetInstance returns the singleton database manager
@@ -72,9 +83,33 @@ func (m *Manager) Init(basePath string) error {
 	}
 
 	dbPath := filepath.Join(dataDir, "notebit.sqlite")
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	dsn := fmt.Sprintf("file:%s?_busy_timeout=5000&_foreign_keys=1", dbPath)
+	driverName := defaultSQLiteDriver
+	if registerSQLiteVecDriver() {
+		driverName = vecSQLiteDriver
+	}
+
+	dialector := sqlite.New(sqlite.Config{
+		DriverName: driverName,
+		DSN:        dsn,
+	})
+
+	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
+	if err != nil && driverName == vecSQLiteDriver {
+		logger.WarnWithFields(context.TODO(), map[string]interface{}{
+			"error": err.Error(),
+		}, "sqlite-vec driver open failed, fallback to default sqlite3 driver")
+
+		dialector = sqlite.New(sqlite.Config{
+			DriverName: defaultSQLiteDriver,
+			DSN:        dsn,
+		})
+		db, err = gorm.Open(dialector, &gorm.Config{
+			Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		})
+	}
 	if err != nil {
 		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
 			"db_path": dbPath,
@@ -86,17 +121,10 @@ func (m *Manager) Init(basePath string) error {
 		return m.initErr
 	}
 
-	if err := db.AutoMigrate(&File{}, &Chunk{}, &Tag{}, &FileTag{}); err != nil {
-		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
+	if err := applyPragmas(db); err != nil {
+		logger.WarnWithFields(context.TODO(), map[string]interface{}{
 			"error": err.Error(),
-		}, "Failed to run database migrations")
-		if sqlDB, closeErr := db.DB(); closeErr == nil {
-			_ = sqlDB.Close()
-		}
-		m.mu.Lock()
-		m.initErr = &DatabaseError{Op: "migrate", Err: err}
-		m.mu.Unlock()
-		return m.initErr
+		}, "Failed to apply one or more SQLite PRAGMA settings")
 	}
 
 	m.mu.Lock()
@@ -107,7 +135,78 @@ func (m *Manager) Init(basePath string) error {
 	m.initErr = nil
 	m.mu.Unlock()
 
+	if err := m.AutoMigrate(); err != nil {
+		logger.ErrorWithFields(context.TODO(), map[string]interface{}{
+			"error": err.Error(),
+		}, "Failed to run database migrations")
+		if sqlDB, closeErr := db.DB(); closeErr == nil {
+			_ = sqlDB.Close()
+		}
+		m.mu.Lock()
+		m.db = nil
+		m.initErr = &DatabaseError{Op: "migrate", Err: err}
+		m.mu.Unlock()
+		return m.initErr
+	}
+
+	go func() {
+		if err := m.MigrateToVec(context.Background()); err != nil {
+			logger.WarnWithFields(context.Background(), map[string]interface{}{
+				"error": err.Error(),
+			}, "Vec migration skipped or failed")
+		}
+	}()
+
 	logger.InfoWithDuration(context.TODO(), timer(), "Database initialized successfully: %s", dbPath)
+	return nil
+}
+
+func registerSQLiteVecDriver() bool {
+	registerVecDriverOnce.Do(func() {
+		for _, name := range sql.Drivers() {
+			if name == vecSQLiteDriver {
+				vecDriverAvailable = true
+				return
+			}
+		}
+
+		defer func() {
+			if recover() != nil {
+				vecDriverAvailable = false
+			}
+		}()
+
+		sql.Register(vecSQLiteDriver, &sqlite3.SQLiteDriver{
+			Extensions: []string{"vec0"},
+		})
+
+		for _, name := range sql.Drivers() {
+			if name == vecSQLiteDriver {
+				vecDriverAvailable = true
+				return
+			}
+		}
+	})
+
+	return vecDriverAvailable
+}
+
+func applyPragmas(db *gorm.DB) error {
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA cache_size=-64000",
+		"PRAGMA mmap_size=268435456",
+		"PRAGMA foreign_keys=ON",
+	}
+
+	for _, pragma := range pragmas {
+		if err := db.Exec(pragma).Error; err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

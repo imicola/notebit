@@ -2,38 +2,8 @@ package database
 
 import (
 	"encoding/binary"
-	"encoding/json"
-	"fmt"
 	"math"
 )
-
-// VectorOperation represents a vector operation result
-type VectorOperation struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-}
-
-// SaveEmbedding saves a vector embedding for a chunk
-// Note: This implementation stores vectors as JSON for now
-// In future versions, we'll use sqlite-vec extension for efficient similarity search
-func (r *Repository) SaveEmbedding(chunkID uint, vector []float32, modelName string) error {
-	// Store as both JSON (legacy) and Blob (optimized)
-	blob := floatsToBytes(vector)
-
-	result := r.db.Model(&Chunk{}).
-		Where("id = ?", chunkID).
-		Updates(map[string]interface{}{
-			"embedding":            vector,
-			"embedding_blob":       blob,
-			"embedding_model":      modelName,
-			"embedding_created_at": "NOW()", // SQLite will handle this
-		})
-
-	if result.Error == nil {
-		r.invalidateVectorCache()
-	}
-	return result.Error
-}
 
 // GetChunkEmbedding retrieves the embedding for a chunk
 func (r *Repository) GetChunkEmbedding(chunkID uint) ([]float32, error) {
@@ -41,7 +11,8 @@ func (r *Repository) GetChunkEmbedding(chunkID uint) ([]float32, error) {
 	// Try fetching blob first
 	err := r.db.Select("embedding_blob").First(&chunk, chunkID).Error
 	if err == nil && len(chunk.EmbeddingBlob) > 0 {
-		return bytesToFloats(chunk.EmbeddingBlob), nil
+		floats := bytesToFloats(chunk.EmbeddingBlob)
+		return floats, nil
 	}
 
 	// Fallback to JSON embedding
@@ -72,6 +43,46 @@ func (r *Repository) SearchSimilar(queryVector []float32, limit int) ([]SimilarC
 	fallback := NewBruteForceVectorEngine()
 	r.vectorEngine = fallback
 	return fallback.Search(r, queryVector, limit)
+}
+
+// SearchSimilarBatch performs similarity search for multiple query vectors.
+// Refactored to use the pluggable VectorEngine and avoid O(N) memory usage.
+// For large datasets (10k+ notes), this prevents loading all chunks into memory.
+func (r *Repository) SearchSimilarBatch(queryVectors [][]float32, limit int) ([][]SimilarChunk, error) {
+	if len(queryVectors) == 0 {
+		return [][]SimilarChunk{}, nil
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Ensure vector engine is initialized
+	if r.vectorEngine == nil {
+		r.vectorEngine = NewBruteForceVectorEngine()
+	}
+
+	results := make([][]SimilarChunk, len(queryVectors))
+
+	// TODO: Implement optimized batch search for sqlite-vec engine
+	// Current implementation iterates queries but uses the efficient Search() method
+	// which avoids loading all chunks into memory (uses streaming or indexed search)
+	for i, query := range queryVectors {
+		if len(query) == 0 {
+			// Skip invalid query vectors
+			results[i] = []SimilarChunk{}
+			continue
+		}
+
+		// Use the optimized single-search method via VectorEngine
+		matches, err := r.vectorEngine.Search(r, query, limit)
+		if err != nil {
+			// Fail fast on error - partial results could be misleading
+			return nil, err
+		}
+		results[i] = matches
+	}
+
+	return results, nil
 }
 
 // SimilarChunk represents a chunk with its similarity score
@@ -106,51 +117,6 @@ func cosineSimilarity(a, b []float32) float32 {
 	return dotProduct / (float32(math.Sqrt(float64(normA))) * float32(math.Sqrt(float64(normB))))
 }
 
-// SaveEmbeddingBatch saves embeddings for multiple chunks in a single transaction
-func (r *Repository) SaveEmbeddingBatch(embeddings []ChunkEmbedding) error {
-	// Start transaction
-	tx := r.db.Begin()
-	if tx.Error != nil {
-		return tx.Error
-	}
-
-	// Defer rollback in case of error
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	for _, emb := range embeddings {
-		blob := floatsToBytes(emb.Vector)
-		err := tx.Model(&Chunk{}).
-			Where("id = ?", emb.ChunkID).
-			Updates(map[string]interface{}{
-				"embedding":            emb.Vector,
-				"embedding_blob":       blob,
-				"embedding_model":      emb.ModelName,
-				"embedding_created_at": "NOW()", // SQLite will handle this
-			}).Error
-		if err != nil {
-			tx.Rollback()
-			return fmt.Errorf("failed to save embedding for chunk %d: %w", emb.ChunkID, err)
-		}
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		return err
-	}
-	r.invalidateVectorCache()
-	return nil
-}
-
-// ChunkEmbedding represents a chunk with its embedding vector
-type ChunkEmbedding struct {
-	ChunkID   uint
-	Vector    []float32
-	ModelName string
-}
-
 // GetEmbeddingStats returns statistics about embeddings in the database
 func (r *Repository) GetEmbeddingStats() (*EmbeddingStats, error) {
 	var stats EmbeddingStats
@@ -159,7 +125,7 @@ func (r *Repository) GetEmbeddingStats() (*EmbeddingStats, error) {
 	r.db.Model(&Chunk{}).Count(&stats.TotalChunks)
 
 	// Count embedded chunks
-	r.db.Model(&Chunk{}).Where("embedding IS NOT NULL").Count(&stats.EmbeddedChunks)
+	r.db.Model(&Chunk{}).Where("embedding_blob IS NOT NULL AND length(embedding_blob) > 0").Count(&stats.EmbeddedChunks)
 
 	// Get unique models
 	var models []string
@@ -178,23 +144,6 @@ type EmbeddingStats struct {
 	Models         []string `json:"models"`
 }
 
-// ToJSON converts the vector to JSON string
-func (c *Chunk) ToJSON() (string, error) {
-	data, err := json.Marshal(c.Embedding)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-// GetEmbeddingDimension returns the dimension of the embedding vector
-func (c *Chunk) GetEmbeddingDimension() int {
-	if c.Embedding == nil {
-		return 0
-	}
-	return len(c.Embedding)
-}
-
 func floatsToBytes(floats []float32) []byte {
 	bytes := make([]byte, len(floats)*4)
 	for i, f := range floats {
@@ -205,7 +154,7 @@ func floatsToBytes(floats []float32) []byte {
 }
 
 func bytesToFloats(bytes []byte) []float32 {
-	if len(bytes)%4 != 0 {
+	if len(bytes) == 0 || len(bytes)%4 != 0 {
 		return nil
 	}
 	floats := make([]float32, len(bytes)/4)
@@ -214,65 +163,4 @@ func bytesToFloats(bytes []byte) []float32 {
 		floats[i] = math.Float32frombits(bits)
 	}
 	return floats
-}
-
-type chunkVector struct {
-	ID            uint   `gorm:"primarykey"`
-	EmbeddingBlob []byte `gorm:"type:blob"`
-}
-
-func (r *Repository) invalidateVectorCache() {
-	r.vectorCacheMu.Lock()
-	r.vectorCache = nil
-	r.vectorCacheLoaded = false
-	r.vectorCacheMu.Unlock()
-}
-
-func (r *Repository) loadVectorCache() error {
-	r.vectorCacheMu.Lock()
-	defer r.vectorCacheMu.Unlock()
-	if r.vectorCacheLoaded {
-		return nil
-	}
-
-	var chunkVectors []chunkVector
-	err := r.db.Model(&Chunk{}).
-		Select("id, embedding_blob").
-		Where("embedding_blob IS NOT NULL").
-		Scan(&chunkVectors).Error
-	if err != nil {
-		return err
-	}
-
-	cache := make(map[uint][]float32, len(chunkVectors))
-	for _, cv := range chunkVectors {
-		vec := bytesToFloats(cv.EmbeddingBlob)
-		if vec == nil {
-			continue
-		}
-		cache[cv.ID] = vec
-	}
-
-	r.vectorCache = cache
-	r.vectorCacheLoaded = true
-	return nil
-}
-
-func (r *Repository) getVectorCache() (map[uint][]float32, error) {
-	r.vectorCacheMu.RLock()
-	if r.vectorCacheLoaded {
-		cache := r.vectorCache
-		r.vectorCacheMu.RUnlock()
-		return cache, nil
-	}
-	r.vectorCacheMu.RUnlock()
-
-	if err := r.loadVectorCache(); err != nil {
-		return nil, err
-	}
-
-	r.vectorCacheMu.RLock()
-	cache := r.vectorCache
-	r.vectorCacheMu.RUnlock()
-	return cache, nil
 }
