@@ -6,6 +6,7 @@ import (
 	"notebit/pkg/config"
 	"notebit/pkg/database"
 	"notebit/pkg/graph"
+	"strings"
 )
 
 // ============ SEMANTIC SEARCH API METHODS ============
@@ -106,16 +107,52 @@ func (a *App) SetVectorSearchEngine(engine string) (map[string]interface{}, erro
 
 // RAGQuery performs a RAG query
 func (a *App) RAGQuery(query string) (map[string]interface{}, error) {
+	if a.chatSvc == nil {
+		return nil, fmt.Errorf("chat service not initialized")
+	}
+	defaultSession, err := a.chatSvc.EnsureDefaultSession()
+	if err != nil {
+		return nil, err
+	}
+	return a.RAGQueryWithSession(defaultSession.ID, query)
+}
+
+// RAGQueryWithSession performs a RAG query and persists the chat in a given session
+func (a *App) RAGQueryWithSession(sessionID, query string) (map[string]interface{}, error) {
 	if a.rag == nil {
 		return nil, fmt.Errorf("RAG service not initialized")
+	}
+	if a.chatSvc == nil {
+		return nil, fmt.Errorf("chat service not initialized")
+	}
+	if strings.TrimSpace(sessionID) == "" {
+		return nil, fmt.Errorf("session id cannot be empty")
+	}
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("query cannot be empty")
+	}
+
+	if _, err := a.chatSvc.AppendMessage(sessionID, "user", query, nil, nil, "sent"); err != nil {
+		return nil, err
 	}
 
 	response, err := a.rag.Query(context.Background(), query)
 	if err != nil {
+		_, _ = a.chatSvc.AppendMessage(sessionID, "system", "Error: "+err.Error(), nil, nil, "error")
+		return nil, err
+	}
+
+	var tokensUsed *int
+	if response.TokensUsed != nil {
+		used := *response.TokensUsed
+		tokensUsed = &used
+	}
+	if _, err := a.chatSvc.AppendMessage(sessionID, "assistant", response.Content, response.Sources, tokensUsed, "done"); err != nil {
 		return nil, err
 	}
 
 	return map[string]interface{}{
+		"session_id":  sessionID,
 		"message_id":  response.MessageID,
 		"content":     response.Content,
 		"sources":     response.Sources,

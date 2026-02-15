@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"notebit/pkg/ai"
 	"notebit/pkg/config"
 	"time"
@@ -209,6 +210,9 @@ func (a *App) IndexFileWithEmbedding(path string) error {
 
 // ReindexAllWithEmbeddings reindexes all files with embeddings
 func (a *App) ReindexAllWithEmbeddings() (map[string]interface{}, error) {
+	if a.ks == nil {
+		return nil, fmt.Errorf("knowledge service not initialized - please open a folder first")
+	}
 	return a.ks.ReindexAllWithEmbeddings()
 }
 

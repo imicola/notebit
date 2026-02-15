@@ -5,6 +5,7 @@ import (
 	"notebit/pkg/database"
 	"notebit/pkg/files"
 	"notebit/pkg/indexing"
+	"notebit/pkg/knowledge"
 	"notebit/pkg/logger"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -44,6 +45,19 @@ func (a *App) OpenFolder() (string, error) {
 		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Database initialization failed")
 	}
 	a.applyVectorEngineConfig()
+
+	// Initialize indexing pipeline and knowledge service after database is ready
+	if a.dbm.IsInitialized() {
+		if a.pipeline == nil {
+			a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
+			a.pipeline.Start()
+		}
+		if a.ks == nil {
+			a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+		}
+		a.initializeChat()
+	}
+
 	a.initializeRAG()
 	a.initializeGraph()
 
@@ -72,6 +86,19 @@ func (a *App) SetFolder(path string) error {
 		logger.Warn("Warning: database initialization failed: %v", err)
 	}
 	a.applyVectorEngineConfig()
+
+	// Initialize indexing pipeline and knowledge service after database is ready
+	if a.dbm.IsInitialized() {
+		if a.pipeline == nil {
+			a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
+			a.pipeline.Start()
+		}
+		if a.ks == nil {
+			a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+		}
+		a.initializeChat()
+	}
+
 	a.initializeRAG()
 	a.initializeGraph()
 

@@ -6,11 +6,21 @@ import {graph} from '../models';
 import {database} from '../models';
 import {files} from '../models';
 
+export function BackupChatNow():Promise<string>;
+
 export function ChunkText(arg1:string):Promise<Array<Record<string, any>>>;
+
+export function CreateChatSession(arg1:string,arg2:string,arg3:Array<string>):Promise<Record<string, any>>;
 
 export function CreateFile(arg1:string,arg2:string):Promise<void>;
 
+export function DeleteChatSession(arg1:string):Promise<void>;
+
 export function DeleteFile(arg1:string):Promise<void>;
+
+export function EnsureDefaultChatSession():Promise<Record<string, any>>;
+
+export function ExportChatSession(arg1:string,arg2:string):Promise<string>;
 
 export function FindSimilar(arg1:string,arg2:number):Promise<Array<main.SimilarNote>>;
 
@@ -21,6 +31,8 @@ export function GenerateEmbeddingsBatch(arg1:Array<string>):Promise<Array<any>>;
 export function GetAIStatus():Promise<Record<string, any>>;
 
 export function GetBasePath():Promise<string>;
+
+export function GetChatStorageOptions():Promise<Record<string, any>>;
 
 export function GetChunkingConfig():Promise<config.ChunkingConfig>;
 
@@ -52,6 +64,10 @@ export function IndexFileWithEmbedding(arg1:string):Promise<void>;
 
 export function IsDatabaseInitialized():Promise<boolean>;
 
+export function ListChatMessages(arg1:string,arg2:number,arg3:number):Promise<Record<string, any>>;
+
+export function ListChatSessions(arg1:string,arg2:number,arg3:number,arg4:string,arg5:boolean,arg6:boolean,arg7:string,arg8:number,arg9:number):Promise<Record<string, any>>;
+
 export function ListFiles():Promise<files.FileNode>;
 
 export function ListIndexedFiles():Promise<Array<database.File>>;
@@ -62,11 +78,15 @@ export function ProcessDocument(arg1:string):Promise<Array<Record<string, any>>>
 
 export function RAGQuery(arg1:string):Promise<Record<string, any>>;
 
+export function RAGQueryWithSession(arg1:string,arg2:string):Promise<Record<string, any>>;
+
 export function ReadFile(arg1:string):Promise<files.NoteContent>;
 
 export function ReindexAllWithEmbeddings():Promise<Record<string, any>>;
 
 export function RemoveFromIndex(arg1:string):Promise<void>;
+
+export function RenameChatSession(arg1:string,arg2:string):Promise<void>;
 
 export function RenameFile(arg1:string,arg2:string):Promise<void>;
 
@@ -75,6 +95,16 @@ export function SaveFile(arg1:string,arg2:string):Promise<void>;
 export function SetAIModel(arg1:string):Promise<void>;
 
 export function SetAIProvider(arg1:string):Promise<void>;
+
+export function SetChatSessionArchived(arg1:string,arg2:boolean):Promise<void>;
+
+export function SetChatSessionCategory(arg1:string,arg2:string):Promise<void>;
+
+export function SetChatSessionFavorite(arg1:string,arg2:boolean):Promise<void>;
+
+export function SetChatSessionTags(arg1:string,arg2:Array<string>):Promise<void>;
+
+export function SetChatStorageOptions(arg1:boolean,arg2:string,arg3:string,arg4:boolean,arg5:number,arg6:string):Promise<void>;
 
 export function SetChunkingConfig(arg1:string,arg2:number,arg3:number,arg4:number,arg5:number,arg6:boolean,arg7:string):Promise<void>;
 

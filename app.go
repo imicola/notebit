@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"notebit/pkg/ai"
+	"notebit/pkg/chat"
 	"notebit/pkg/config"
 	"notebit/pkg/database"
 	"notebit/pkg/files"
@@ -33,6 +34,7 @@ type App struct {
 	graph    *graph.Service
 	llm      ai.LLMProvider
 	pipeline *indexing.IndexingPipeline
+	chatSvc  *chat.Service
 }
 
 type watcherLogger struct {
@@ -85,6 +87,7 @@ func (a *App) startup(ctx context.Context) {
 		a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
 		a.pipeline.Start()
 		a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+		a.initializeChat()
 	}
 
 	// Start file watcher if database is initialized and base path is set
@@ -199,6 +202,22 @@ func (a *App) initializeGraph() {
 	}
 }
 
+func (a *App) initializeChat() {
+	if !a.dbm.IsInitialized() {
+		return
+	}
+	if a.chatSvc != nil {
+		a.chatSvc.Close()
+		a.chatSvc = nil
+	}
+	svc, err := chat.NewService(a.dbm.GetDB(), a.dbm.GetBasePath())
+	if err != nil {
+		runtime.LogWarningf(a.ctx, "Failed to initialize chat service: %v", err)
+		return
+	}
+	a.chatSvc = svc
+}
+
 // startWatcher starts the file watcher service
 func (a *App) startWatcher() error {
 	watcherCfg := a.cfg.GetWatcherConfig()
@@ -272,5 +291,8 @@ func (a *App) shutdown(context.Context) {
 	a.stopWatcher()
 	if a.pipeline != nil {
 		a.pipeline.Stop()
+	}
+	if a.chatSvc != nil {
+		a.chatSvc.Close()
 	}
 }

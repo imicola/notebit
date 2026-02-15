@@ -3,6 +3,7 @@
  * Wraps Wails API calls with consistent error handling
  */
 import { RAGQuery, GetRAGStatus } from '../../wailsjs/go/main/App';
+import { RAGQueryWithSession } from '../../wailsjs/go/main/App';
 import { EventsOn } from '../../wailsjs/runtime/runtime';
 
 /**
@@ -31,7 +32,10 @@ export const ragService = {
    * @param {string} query - The query text
    * @returns {Promise<Object>} RAG response with content and sources
    */
-  async query(query) {
+  async query(query, sessionId) {
+    if (sessionId) {
+      return wrapCall('ragQueryWithSession', () => RAGQueryWithSession(sessionId, query));
+    }
     return wrapCall('ragQuery', () => RAGQuery(query));
   },
 
