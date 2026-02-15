@@ -5,7 +5,6 @@ import (
 	"notebit/pkg/database"
 	"notebit/pkg/files"
 	"notebit/pkg/indexing"
-	"notebit/pkg/knowledge"
 	"notebit/pkg/logger"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -39,27 +38,9 @@ func (a *App) OpenFolder() (string, error) {
 		return "", err
 	}
 
-	// Initialize database
-	if err := a.dbm.Init(dir); err != nil {
-		// Don't fail if database initialization fails - log but continue
-		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Database initialization failed")
+	if err := a.initializeServices(dir); err != nil {
+		logger.WarnWithFields(a.ctx, map[string]interface{}{"path": dir, "error": err.Error()}, "Service initialization issue")
 	}
-	a.applyVectorEngineConfig()
-
-	// Initialize indexing pipeline and knowledge service after database is ready
-	if a.dbm.IsInitialized() {
-		if a.pipeline == nil {
-			a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
-			a.pipeline.Start()
-		}
-		if a.ks == nil {
-			a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
-		}
-		a.initializeChat()
-	}
-
-	a.initializeRAG()
-	a.initializeGraph()
 
 	// Start watcher for new folder
 	if err := a.startWatcher(); err != nil {
@@ -80,27 +61,9 @@ func (a *App) SetFolder(path string) error {
 		return err
 	}
 
-	// Initialize database
-	if err := a.dbm.Init(path); err != nil {
-		// Don't fail if database initialization fails
-		logger.Warn("Warning: database initialization failed: %v", err)
+	if err := a.initializeServices(path); err != nil {
+		logger.Warn("Service initialization issue: %v", err)
 	}
-	a.applyVectorEngineConfig()
-
-	// Initialize indexing pipeline and knowledge service after database is ready
-	if a.dbm.IsInitialized() {
-		if a.pipeline == nil {
-			a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
-			a.pipeline.Start()
-		}
-		if a.ks == nil {
-			a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
-		}
-		a.initializeChat()
-	}
-
-	a.initializeRAG()
-	a.initializeGraph()
 
 	// Start watcher for new folder
 	if err := a.startWatcher(); err != nil {

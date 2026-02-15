@@ -1,38 +1,51 @@
-# Architecture Layer Analysis Report
-**Last Updated**: 2026-02-18
-**Status**: RESOLVED ✅
+# Architecture Layer Analysis Report (Round 2)
 
-## Layering Violations — ALL RESOLVED
+## Date: 2026-02-15
+## Status: Analysis Complete ✅
 
-| Violation Location | Problem | Severity | Fix Applied | Status |
-|--------------------|---------|----------|-------------|--------|
-| `frontend/src/App.jsx` | UI root directly imported Wails APIs | High | Integrated 5 hooks (useFileOperations, useSettings, useToast, useResizable, useKeyboardShortcuts) | ✅ Fixed |
-| `frontend/src/components/ChatPanel.jsx` | Direct Wails RAGQuery call | High | Routes through `services/ragService.js` | ✅ Fixed |
-| `frontend/src/components/GraphPanel.jsx` | Direct GetGraphData call | High | Routes through `services/graphService.js` | ✅ Fixed |
-| `frontend/src/components/SimilarNotesSidebar.jsx` | Direct FindSimilar/GetSimilarityStatus calls | High | Routes through `services/similarityService.js` | ✅ Fixed |
-| `frontend/src/components/AISettings.jsx` | Monolithic 675-line component | High | Decomposed into useAISettings hook + 4 Tab sub-components | ✅ Fixed |
-| `pkg/database/manager.go` | Logger APIs receive nil context | High | All nil context args → context.TODO() | ✅ Fixed |
+---
 
-## Circular Dependencies
-- No explicit circular dependency detected from current scan.
-- Risk remains in `app.go` due to broad orchestration and cross-service touchpoints.
+## 1. 错误处理分层违规
 
-## Directory Structure Issues
+### 问题：三种错误处理模式并存
+| 模式 | 使用位置 | 
+|------|----------|
+| 自定义 Error 类型（定义但未用） | `pkg/ai/errors.go`, `pkg/database/errors.go` |
+| `fmt.Errorf()` | 全局主流 |
+| GORM 原始错误 | `repository.go` |
 
-| Issue | Location | Suggestion |
-|-------|----------|------------|
-| Empty placeholder directories | `frontend/src/components/Editor`, `FileTree`, `Layout`, `Preview` | Remove or populate with actual split modules |
-| Temporary workspace residues | root `tmpclaude-*` directories | Clean after confirming no runtime reliance |
-| Hybrid API access style | service layer exists but bypassed in components | Enforce service-only Wails access guideline |
+---
 
-## Architecture Risk Assessment
-1. **Boundary Drift**: direct Wails calls scattered in UI components reduce testability and consistency.
-2. **God Object Risk**: `app.go` and `App.jsx` both exceed practical orchestration scope.
-3. **Operational Safety Risk**: context misuse in logger calls weakens observability contracts.
+## 2. 返回类型分层违规
 
-## Architecture Layer Refactoring Tasks
-1. **[A-101] Logger Context Safety**: replace `nil` contexts in `pkg/database/manager.go`.
-2. **[A-102] Frontend API Boundary Enforcement**: migrate all direct component-level Wails imports into service adapters.
-3. **[A-103] App Shell Slimming**: convert `frontend/src/App.jsx` to composition shell using existing hooks.
-4. **[A-104] Backend Binding Slimming**: split `app.go` orchestration into domain-specific coordinators.
-5. **[A-105] Structure Hygiene**: clean empty dirs and temp residues; keep folder responsibilities explicit.
+### `map[string]interface{}` 在公共 API 中泛滥
+涉及: app_ai.go, app_search.go, app_files.go, app_chat.go, knowledge/service.go
+
+---
+
+## 3. Context 传播断裂
+- `ai.Initialize()` 使用 `context.TODO()`
+- `indexing.processJob()` 使用 `context.Background()`
+- `knowledge.*` 大多方法不接受 context
+- `chat.*` 绝大多数方法不接受 context
+
+---
+
+## 4. 三重维度映射表重复
+- `pkg/ai/openai.go:GetModelDimension`
+- `pkg/ai/ollama.go:getKnownModelDimension`
+- `pkg/config/config.go:ModelDimensions`
+
+---
+
+## 5. 服务初始化重复
+`OpenFolder()` / `SetFolder()` / `startup()` 三处相似的初始化序列
+
+---
+
+## Architecture Layer 任务清单
+
+| ID | 任务 | 严重度 |
+|----|------|--------|
+| A-201 | 统一模型维度映射到单一来源 | P2 |
+| A-202 | 提取 initializeServices 消除初始化重复 | P2 |

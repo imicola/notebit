@@ -2,6 +2,7 @@ package indexing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"notebit/pkg/ai"
 	"notebit/pkg/config"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,6 +32,8 @@ type IndexingPipeline struct {
 	// Deduplication map to prevent concurrent indexing of the same file
 	inProgress sync.Map // map[string]bool
 }
+
+var errPipelineStopped = errors.New("indexing pipeline not started")
 
 // IndexJob represents a single file indexing job
 type IndexJob struct {
@@ -54,8 +58,8 @@ type IndexOptions struct {
 // IndexProgress tracks multi-file indexing progress
 type IndexProgress struct {
 	Total     int
-	Processed int
-	Errors    int
+	Processed atomic.Int64
+	Errors    atomic.Int64
 	Done      chan struct{} // Closed when indexing completes
 }
 
@@ -262,16 +266,25 @@ func (p *IndexingPipeline) indexWithChunking(ctx context.Context, path, content 
 
 // Enqueue submits a file for async indexing (non-blocking)
 func (p *IndexingPipeline) Enqueue(path, content string, opts IndexOptions) {
+	p.mu.Lock()
+	started := p.isStarted
+	p.mu.Unlock()
+	if !started {
+		logger.Warn("Indexing pipeline not started, dropping job for: %s", path)
+		return
+	}
+
 	job := &IndexJob{
 		Path:    path,
 		Content: content,
 		Opts:    opts,
 	}
 
-	select {
-	case p.workQueue <- job:
-		// Successfully enqueued
-	default:
+	if err := p.safeEnqueueNonBlocking(job); err != nil {
+		if errors.Is(err, errPipelineStopped) {
+			logger.Warn("Indexing pipeline stopped during enqueue, dropping job for: %s", path)
+			return
+		}
 		logger.WarnWithFields(context.Background(), map[string]interface{}{
 			"path": path,
 		}, "Indexing queue full, dropping job")
@@ -280,24 +293,28 @@ func (p *IndexingPipeline) Enqueue(path, content string, opts IndexOptions) {
 
 // IndexFile indexes a single file synchronously
 func (p *IndexingPipeline) IndexFile(ctx context.Context, path string, opts IndexOptions) error {
+	p.mu.Lock()
+	started := p.isStarted
+	p.mu.Unlock()
+	if !started {
+		return errPipelineStopped
+	}
+
 	job := &IndexJob{
 		Path:    path,
 		Opts:    opts,
 		ErrChan: make(chan error, 1),
 	}
 
-	// Try to enqueue with timeout
+	if err := p.safeEnqueueWithTimeout(ctx, job, 5*time.Second); err != nil {
+		return err
+	}
+
+	// Wait for result
 	select {
-	case p.workQueue <- job:
-		// Wait for result
-		select {
-		case err := <-job.ErrChan:
-			return err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("indexing queue full, timeout")
+	// Wait for result
+	case err := <-job.ErrChan:
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -305,6 +322,13 @@ func (p *IndexingPipeline) IndexFile(ctx context.Context, path string, opts Inde
 
 // IndexContent indexes file content directly (synchronous)
 func (p *IndexingPipeline) IndexContent(ctx context.Context, path, content string, opts IndexOptions) error {
+	p.mu.Lock()
+	started := p.isStarted
+	p.mu.Unlock()
+	if !started {
+		return errPipelineStopped
+	}
+
 	job := &IndexJob{
 		Path:    path,
 		Content: content,
@@ -312,16 +336,13 @@ func (p *IndexingPipeline) IndexContent(ctx context.Context, path, content strin
 		ErrChan: make(chan error, 1),
 	}
 
+	if err := p.safeEnqueueWithTimeout(ctx, job, 5*time.Second); err != nil {
+		return err
+	}
+
 	select {
-	case p.workQueue <- job:
-		select {
-		case err := <-job.ErrChan:
-			return err
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	case <-time.After(5 * time.Second):
-		return fmt.Errorf("indexing queue full, timeout")
+	case err := <-job.ErrChan:
+		return err
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -329,6 +350,13 @@ func (p *IndexingPipeline) IndexContent(ctx context.Context, path, content strin
 
 // IndexAll indexes multiple files concurrently
 func (p *IndexingPipeline) IndexAll(ctx context.Context, paths []string, opts IndexOptions) (*IndexProgress, error) {
+	p.mu.Lock()
+	started := p.isStarted
+	p.mu.Unlock()
+	if !started {
+		return nil, errPipelineStopped
+	}
+
 	progress := &IndexProgress{
 		Total: len(paths),
 		Done:  make(chan struct{}),
@@ -338,14 +366,13 @@ func (p *IndexingPipeline) IndexAll(ctx context.Context, paths []string, opts In
 		defer close(progress.Done)
 
 		var wg sync.WaitGroup
-		errorCh := make(chan error, len(paths))
 
 		// Limit concurrent enqueue goroutines to avoid resource pressure
 		// when processing 10k+ files. Using a semaphore pattern.
 		maxConcurrentEnqueue := 50 // Reasonable limit for concurrent submission
 		sem := make(chan struct{}, maxConcurrentEnqueue)
 
-Loop:
+	Loop:
 		for _, path := range paths {
 			if ctx.Err() != nil {
 				break Loop
@@ -369,25 +396,58 @@ Loop:
 					ErrChan: make(chan error, 1),
 				}
 
-				select {
-				case p.workQueue <- job:
-					err := <-job.ErrChan
-					if err != nil {
-						errorCh <- err
-						progress.Errors++
+				if err := p.safeEnqueueWithTimeout(ctx, job, 5*time.Second); err != nil {
+					if !errors.Is(err, context.Canceled) {
+						progress.Errors.Add(1)
+						progress.Processed.Add(1)
 					}
-					progress.Processed++
-				case <-ctx.Done():
 					return
 				}
+
+				err := <-job.ErrChan
+				if err != nil {
+					progress.Errors.Add(1)
+				}
+				progress.Processed.Add(1)
 			}(path)
 		}
 
 		wg.Wait()
-		close(errorCh)
 	}()
 
 	return progress, nil
+}
+
+func (p *IndexingPipeline) safeEnqueueNonBlocking(job *IndexJob) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errPipelineStopped
+		}
+	}()
+
+	select {
+	case p.workQueue <- job:
+		return nil
+	default:
+		return fmt.Errorf("indexing queue full")
+	}
+}
+
+func (p *IndexingPipeline) safeEnqueueWithTimeout(ctx context.Context, job *IndexJob, timeout time.Duration) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = errPipelineStopped
+		}
+	}()
+
+	select {
+	case p.workQueue <- job:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("indexing queue full, timeout")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Stop gracefully shuts down the worker pool

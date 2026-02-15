@@ -26,7 +26,7 @@ import {
 /**
  * Custom error class for AI operations
  */
-export class AIServiceError extends Error {
+class AIServiceError extends Error {
   constructor(operation, originalError) {
     super(`AI operation failed: ${operation}`);
     this.name = 'AIServiceError';
@@ -156,5 +156,3 @@ export const aiService = {
     return wrapCall('setGraphConfig', () => SetGraphConfig(minSimilarityThreshold, maxNodes, showImplicitLinks));
   },
 };
-
-export default aiService;

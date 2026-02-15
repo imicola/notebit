@@ -38,6 +38,7 @@ export default function GraphPanel() {
 	// --- Resize Handler ---
 	useEffect(() => {
 		let resizeTimer;
+		let initTimer;
 		const updateDimensions = () => {
 			if (containerRef.current) {
 				setDimensions({
@@ -55,30 +56,27 @@ export default function GraphPanel() {
 		updateDimensions();
 		
 		// Small delay to ensure container is ready
-		setTimeout(updateDimensions, 100);
+		initTimer = setTimeout(updateDimensions, 100);
 
 		return () => {
 			window.removeEventListener('resize', handleResize);
 			if (resizeTimer) clearTimeout(resizeTimer);
+			clearTimeout(initTimer);
 		};
 	}, []);
 
-	// --- Load Data ---
+	// --- Load Data (raw, no color mapping) ---
+	const [rawGraphData, setRawGraphData] = useState(null);
+
 	const loadGraph = useCallback(async () => {
 		setLoading(true);
 		setError(null);
 		try {
 			const data = await graphService.getGraphData();
 			
-			// Process data for ForceGraph
-			// We need to ensure nodes and links are mutable objects
 			const nodes = (data?.nodes || []).map(n => ({
 				...n,
-				// Assign color based on type - Obsidian style: mostly grey/white, maybe purple for focus
-				color: n.type === 'concept' ? themeColors.concept :
-					   n.type === 'tag' ? themeColors.tag :
-					   themeColors.note,
-				val: n.type === 'concept' ? 15 : (Math.sqrt(n.size || 1) * 3 + 2) // Smaller, more uniform sizes
+				val: n.type === 'concept' ? 15 : (Math.sqrt(n.size || 1) * 3 + 2)
 			}));
 
 			const links = (data?.links || []).map(l => ({
@@ -88,14 +86,26 @@ export default function GraphPanel() {
 				strength: l.strength
 			}));
 
-			setGraphData({ nodes, links });
+			setRawGraphData({ nodes, links });
 		} catch (err) {
 			console.error('Failed to load graph:', err);
 			setError(err.message || 'Failed to load graph');
 		} finally {
 			setLoading(false);
 		}
-	}, [themeColors]);
+	}, []);
+
+	// Apply theme colors to graph data (no re-fetch on theme change)
+	useEffect(() => {
+		if (!rawGraphData) return;
+		const coloredNodes = rawGraphData.nodes.map(n => ({
+			...n,
+			color: n.type === 'concept' ? themeColors.concept :
+				   n.type === 'tag' ? themeColors.tag :
+				   themeColors.note,
+		}));
+		setGraphData({ nodes: coloredNodes, links: rawGraphData.links });
+	}, [rawGraphData, themeColors]);
 
 	useEffect(() => {
 		loadGraph();
@@ -167,6 +177,13 @@ export default function GraphPanel() {
 			}, 300);
 		}
 	};
+
+	// Cleanup click timeout on unmount
+	useEffect(() => {
+		return () => {
+			if (clickTimeout.current) clearTimeout(clickTimeout.current);
+		};
+	}, []);
 
 	// --- Custom Rendering ---
 	const paintNode = useMemo(

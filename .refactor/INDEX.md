@@ -1,33 +1,24 @@
-# .refactor Quick Reference
+# .refactor Quick Reference — Round 2
 
-**Status**: ✅ Refactoring Complete  
-**Last Updated**: 2026-02-18  
+**Status**: ✅ All Tasks Complete, Awaiting V-201 Verification  
+**Last Updated**: 2026-02-15  
 
 ---
 
 ## 📚 Documentation Map
 
 ### Main Documents
-- **[README.md](README.md)** — Overview and key metrics
-- **[COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)** — Comprehensive refactoring summary
-- **[SESSION_LOG.md](SESSION_LOG.md)** — Detailed session execution log
-
-### Task Documentation
-- **[tasks/master-plan.md](tasks/master-plan.md)** — Complete plan with all 8 tasks marked complete
-- **[tasks/completed/](tasks/completed/)** — Individual task completion reports (7 files)
-  - `task-A-101.md` — Logger context safety
-  - `task-A-102.md` — Frontend service adapters
-  - `task-M-101.md` — App shell hook integration
-  - `task-M-104.md` — AISettings decomposition
-  - `task-B-101.md` — app.go domain extraction
-  - `task-Q-101.md` — Structure cleanup
-  - `task-Q-102.md` — Pattern consistency
+- **[README.md](README.md)** — Overview, metrics, and status
+- **[tasks/master-plan.md](tasks/master-plan.md)** — Complete plan with 14 tasks
 
 ### Analysis Documents
-- **[analysis/architecture-report.md](analysis/architecture-report.md)** — All layering violations resolved ✅
-- **[analysis/module-report.md](analysis/module-report.md)** — Module quality metrics and health scores
-- **[analysis/project-partition.md](analysis/project-partition.md)** — Domain boundaries
-- **[analysis/key-identification.md](analysis/key-identification.md)** — Key findings from initial analysis
+- **[analysis/architecture-report.md](analysis/architecture-report.md)** — Architecture layer issues
+- **[analysis/module-report.md](analysis/module-report.md)** — Module layer problem summary
+- **[analysis/modules/](analysis/modules/)** — Detailed per-module analysis:
+  - `ai-service.md` — AI service package (9 issues)
+  - `database.md` — Database package (7 issues)
+  - `other-packages.md` — Config, Files, Indexing, RAG, Graph, Watcher, Chat, Logger
+  - `frontend.md` — All frontend components and hooks (18 issues)
 
 ---
 
@@ -35,116 +26,29 @@
 
 | Metric | Value |
 |--------|-------|
-| Tasks Completed | 8/8 ✅ |
-| Files Created | 11 |
-| Files Modified | 7 |
-| Files Deleted | 9 |
-| Lines Eliminated | ~900 |
-| Lines of Code (App.jsx) | 498 → 365 (-27%) |
-| Lines of Code (AISettings) | 675 → 120 (-82%) |
-| Lines of Code (app.go) | 926 → 258 (-72%) |
-| Go Tests Passing | 14/14 ✅ |
-| Build Warnings | 0 ✅ |
-| Component Wails Coupling | 0 violations ✅ |
+| Total Issues Found | 50+ |
+| P0 Critical | 5 |
+| P1 High | 9 |
+| P2 Medium | 24 |
+| Tasks Planned | 14 |
+| Phases | 5 (including user verification) |
 
 ---
 
-## 📁 Files Summary
+## ⚡ Task Execution Order
 
-### Created Infrastructure
-
-**Services** (4 new)
-- `frontend/src/services/aiService.js` — AI configuration
-- `frontend/src/services/ragService.js` — RAG queries
-- `frontend/src/services/graphService.js` — Graph data
-- `frontend/src/services/similarityService.js` — Semantic search
-
-**Hooks** (1 new, 4 existing now integrated)
-- `frontend/src/hooks/useAISettings.js` — AI settings state management
-
-**Components** (5 new)
-- `frontend/src/components/AISettings/EmbeddingTab.jsx`
-- `frontend/src/components/AISettings/LLMTab.jsx`
-- `frontend/src/components/AISettings/RAGTab.jsx`
-- `frontend/src/components/AISettings/GraphTab.jsx`
-- `frontend/src/components/AISettings/index.jsx`
-
-**Backend** (3 new)
-- `app_ai.go` — AI configuration and embedding
-- `app_files.go` — File operations and indexing
-- `app_search.go` — Search, RAG, and graph
-
-### Major Refactoring
-
-**Significantly Reduced**
-- `App.jsx` — 498 → 365 lines (-27%)
-- `AISettings.jsx` — 675 → 120 lines (-82%)
-- `app.go` — 926 → 258 lines (-72%)
-
-**Migrated to Service Adapters**
-- `ChatPanel.jsx` → `ragService`
-- `GraphPanel.jsx` → `graphService`
-- `SimilarNotesSidebar.jsx` → `similarityService`
-- `AIStatusIndicator.jsx` → `similarityService`
-
-**Integrated Hooks**
-- `App.jsx` → useFileOperations, useSettings, useToast, useResizable, useKeyboardShortcuts
-
----
-
-## 🔍 Key Improvements
-
-### Architectural
-- ✅ Service adapter pattern fully implemented (0 direct Wails imports in components)
-- ✅ Clear separation of concerns across 4 backend domain files
-- ✅ Context safety: nil context → context.TODO()
-- ✅ Custom hooks framework utilized throughout
-
-### Code Quality
-- ✅ Reduced component size (342 lines → 242 lines average)
-- ✅ Eliminated duplicate code (~900 lines)
-- ✅ Removed debug artifacts (console.log)
-- ✅ Consistent error handling patterns
-
-### Testing & Validation
-- ✅ 14/14 Go tests passing
-- ✅ Frontend vite build succeeds
-- ✅ Zero compiler warnings
-- ✅ All functionality preserved
-
----
-
-## 🚀 Quick Navigation
-
-**For Code Review**: Start with [COMPLETION_SUMMARY.md](COMPLETION_SUMMARY.md)
-
-**For Implementation Details**: Read individual [task files](tasks/completed/) in order:
-1. A-101 (Logger safety)
-2. A-102 (Services)
-3. M-101 (App hooks)
-4. M-104 (AISettings)
-5. B-101 (app.go split)
-6. Q-101 (Cleanup)
-7. Q-102 (Patterns)
-
-**For Metrics & Impact**: See [analysis/module-report.md](analysis/module-report.md)
-
-**For Session Details**: See [SESSION_LOG.md](SESSION_LOG.md)
-
----
-
-## ✅ Verification Checklist
-
-- [x] `go build ./...` — PASS
-- [x] `go test ./...` — 14/14 PASS
-- [x] `npx vite build` — SUCCESS
-- [x] Zero compiler warnings
-- [x] All features functional
-- [x] Documentation updated
-- [x] Ready for production
-
----
-
-## 📞 Questions?
-
-Refer to the appropriate document above, or check [SESSION_LOG.md](SESSION_LOG.md) for execution details and solutions to challenges encountered.
+1. ✅ **M-201**: AI GetStatus 死锁修复
+2. ✅ **M-202**: MigrateToVec 死循环修复
+3. ✅ **M-203**: IndexAll 数据竞争修复
+4. ✅ **M-204**: 路径遍历安全防护
+5. ✅ **M-205**: Config boolean merge 修复
+6. ✅ **M-206**: RAG context 遮蔽修复
+7. ✅ **M-207**: Chat BackupTicker panic 修复
+8. ✅ **M-208**: DB 静默错误修复
+9. ✅ **M-209**: Go 死代码清理
+10. ✅ **M-212**: 重复逻辑提取
+11. ✅ **A-201**: 维度映射统一
+12. ✅ **A-202**: 服务初始化统一
+13. ✅ **M-210**: 前端性能修复
+14. ✅ **M-211**: 前端死代码清理
+15. ⏳ **V-201**: 统一编译验证 (用户执行)

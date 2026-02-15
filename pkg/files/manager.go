@@ -22,6 +22,21 @@ func NewManager() *Manager {
 	return &Manager{}
 }
 
+// validatePath ensures the resolved path stays within basePath, preventing path traversal attacks.
+// Returns the absolute full path if valid.
+func (m *Manager) validatePath(basePath, relativePath string) (string, error) {
+	fullPath := filepath.Join(basePath, relativePath)
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		return "", &FileSystemError{Op: "validate_path", Path: relativePath, Err: fmt.Errorf("cannot resolve absolute path: %w", err)}
+	}
+	// Ensure the resolved path is within basePath (add separator to prevent prefix matching like /notes vs /notes-backup)
+	if !strings.HasPrefix(absPath, basePath+string(filepath.Separator)) && absPath != basePath {
+		return "", &FileSystemError{Op: "validate_path", Path: relativePath, Err: fmt.Errorf("path traversal detected: resolved to %s", absPath)}
+	}
+	return absPath, nil
+}
+
 // SetBasePath sets the base directory for notes
 func (m *Manager) SetBasePath(path string) error {
 	m.mu.Lock()
@@ -111,6 +126,11 @@ func (m *Manager) buildTree(rootPath, relativePath string) (*FileNode, error) {
 			continue
 		}
 
+		// Skip data directory (contains SQLite database)
+		if name == "data" && entry.IsDir() {
+			continue
+		}
+
 		// Only include directories and markdown files
 		if entry.IsDir() {
 			childPath := filepath.Join(relativePath, name)
@@ -154,7 +174,10 @@ func (m *Manager) ReadFile(relativePath string) (*NoteContent, error) {
 		}
 	}
 
-	fullPath := filepath.Join(basePath, relativePath)
+	fullPath, err := m.validatePath(basePath, relativePath)
+	if err != nil {
+		return nil, err
+	}
 
 	info, err := os.Stat(fullPath)
 	if err != nil {
@@ -189,7 +212,10 @@ func (m *Manager) SaveFile(relativePath, content string) error {
 		}
 	}
 
-	fullPath := filepath.Join(basePath, relativePath)
+	fullPath, err := m.validatePath(basePath, relativePath)
+	if err != nil {
+		return err
+	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(fullPath)
@@ -218,7 +244,10 @@ func (m *Manager) CreateFile(relativePath, content string) error {
 		}
 	}
 
-	fullPath := filepath.Join(basePath, relativePath)
+	fullPath, err := m.validatePath(basePath, relativePath)
+	if err != nil {
+		return err
+	}
 
 	// Check if file already exists
 	if _, err := os.Stat(fullPath); err == nil {
@@ -256,7 +285,10 @@ func (m *Manager) DeleteFile(relativePath string) error {
 		}
 	}
 
-	fullPath := filepath.Join(basePath, relativePath)
+	fullPath, err := m.validatePath(basePath, relativePath)
+	if err != nil {
+		return err
+	}
 
 	if err := os.RemoveAll(fullPath); err != nil {
 		return &FileSystemError{Op: "delete", Path: fullPath, Err: err}
@@ -278,8 +310,14 @@ func (m *Manager) RenameFile(oldPath, newPath string) error {
 		}
 	}
 
-	oldFullPath := filepath.Join(basePath, oldPath)
-	newFullPath := filepath.Join(basePath, newPath)
+	oldFullPath, err := m.validatePath(basePath, oldPath)
+	if err != nil {
+		return err
+	}
+	newFullPath, err := m.validatePath(basePath, newPath)
+	if err != nil {
+		return err
+	}
 
 	// Ensure new directory exists
 	newDir := filepath.Dir(newFullPath)
@@ -304,7 +342,10 @@ func (m *Manager) FileExists(relativePath string) bool {
 		return false
 	}
 
-	fullPath := filepath.Join(basePath, relativePath)
-	_, err := os.Stat(fullPath)
+	fullPath, err := m.validatePath(basePath, relativePath)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(fullPath)
 	return err == nil
 }

@@ -272,16 +272,11 @@ func (p *OpenAIProvider) GenerateEmbeddingsBatch(texts []string) ([]*EmbeddingRe
 
 // GetModelDimension returns the output dimension for a given model
 func (p *OpenAIProvider) GetModelDimension(model string) (int, error) {
-	dimensions := map[string]int{
-		"text-embedding-3-small": 1536,
-		"text-embedding-3-large": 3072,
-		"text-embedding-ada-002": 1536,
-	}
-
-	if dim, ok := dimensions[model]; ok {
+	if dim, ok := LookupModelDimension(model); ok {
 		return dim, nil
 	}
-	return 0, fmt.Errorf("unknown model: %s", model)
+	// Fallback to default dimension for unknown models (supports custom/new models)
+	return DefaultEmbeddingDimension, nil
 }
 
 // GetDefaultModel returns the default model name

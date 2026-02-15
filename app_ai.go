@@ -175,10 +175,9 @@ func (a *App) ChunkText(text string) ([]map[string]interface{}, error) {
 	result := make([]map[string]interface{}, len(chunks))
 	for i, chunk := range chunks {
 		result[i] = map[string]interface{}{
-			"content":  chunk.Content,
-			"heading":  chunk.Heading,
-			"index":    chunk.Index,
-			"metadata": chunk.Metadata,
+			"content": chunk.Content,
+			"heading": chunk.Heading,
+			"index":   chunk.Index,
 		}
 	}
 	return result, nil
@@ -194,10 +193,11 @@ func (a *App) ProcessDocument(text string) ([]map[string]interface{}, error) {
 	result := make([]map[string]interface{}, len(chunks))
 	for i, chunk := range chunks {
 		result[i] = map[string]interface{}{
-			"content":  chunk.Content,
-			"heading":  chunk.Heading,
-			"index":    chunk.Index,
-			"metadata": chunk.Metadata,
+			"content":         chunk.Content,
+			"heading":         chunk.Heading,
+			"index":           chunk.Index,
+			"embedding":       chunk.Embedding,
+			"embedding_model": chunk.ModelName,
 		}
 	}
 	return result, nil

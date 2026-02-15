@@ -159,7 +159,11 @@ func (s *Service) SetProvider(name string) error {
 func (s *Service) GetAvailableProviders() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getAvailableProvidersLocked()
+}
 
+// getAvailableProvidersLocked returns available providers without acquiring lock (caller must hold lock)
+func (s *Service) getAvailableProvidersLocked() []string {
 	names := make([]string, 0, len(s.providers))
 	for name := range s.providers {
 		names = append(names, name)
@@ -243,13 +247,14 @@ func (s *Service) GenerateEmbeddingsBatch(texts []string) ([]*EmbeddingResponse,
 
 // ChunkText splits text using the configured chunking strategy
 func (s *Service) ChunkText(text string) ([]TextChunk, error) {
+	s.mu.RLock()
 	chunkCfg := s.cfg.GetChunkingConfig()
-
 	chunker, ok := s.chunkers[chunkCfg.Strategy]
 	if !ok {
 		// Fall back to heading strategy
 		chunker = s.chunkers["heading"]
 	}
+	s.mu.RUnlock()
 
 	return chunker.Chunk(text)
 }
@@ -271,7 +276,11 @@ func (s *Service) ChunkTextWithStrategy(text, strategy string) ([]TextChunk, err
 func (s *Service) GetAvailableStrategies() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.getAvailableStrategiesLocked()
+}
 
+// getAvailableStrategiesLocked returns available strategies without acquiring lock (caller must hold lock)
+func (s *Service) getAvailableStrategiesLocked() []string {
 	strategies := make([]string, 0, len(s.chunkers))
 	for name := range s.chunkers {
 		strategies = append(strategies, name)
@@ -307,11 +316,6 @@ func (s *Service) ProcessDocument(text string) ([]TextChunk, error) {
 		if i < len(chunks) && emb != nil {
 			chunks[i].Embedding = emb.Embedding
 			chunks[i].ModelName = emb.Model
-			if chunks[i].Metadata == nil {
-				chunks[i].Metadata = make(map[string]interface{})
-			}
-			chunks[i].Metadata["embedding"] = emb.Embedding
-			chunks[i].Metadata["embedding_model"] = emb.Model
 		}
 	}
 
@@ -385,10 +389,10 @@ func (s *Service) GetStatus() (*ServiceStatus, error) {
 
 	status := &ServiceStatus{
 		CurrentProvider:     s.currentProvider,
-		AvailableProviders:  s.GetAvailableProviders(),
+		AvailableProviders:  s.getAvailableProvidersLocked(),
 		CurrentModel:        s.cfg.GetEmbeddingModel(),
 		ChunkingStrategy:    s.cfg.GetChunkingConfig().Strategy,
-		AvailableStrategies: s.GetAvailableStrategies(),
+		AvailableStrategies: s.getAvailableStrategiesLocked(),
 	}
 
 	// Get model dimension

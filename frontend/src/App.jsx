@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FolderOpen, X, Monitor, Save, Settings, Menu, Sparkles, MessageSquare, Network } from 'lucide-react';
 import { fileService } from './services/fileService';
 import FileTree from './components/FileTree';
@@ -130,6 +130,10 @@ function App() {
     return () => window.removeEventListener('open-file', handleOpenFile);
   }, [fileTree, selectFile]);
 
+  // Ref for currentContent to avoid stale closure in commands
+  const currentContentRef = useRef(currentContent);
+  currentContentRef.current = currentContent;
+
   // Commands for Palette
   const commands = useMemo(() => [
     {
@@ -150,9 +154,14 @@ function App() {
       label: 'Save File',
       shortcut: 'Cmd+S',
       icon: Save,
-      action: () => handleSave(currentContent),
+      action: () => handleSave(currentContentRef.current),
     },
-  ], [isZenMode, handleOpenFolder, handleSave, currentContent]);
+  ], [isZenMode, handleOpenFolder, handleSave]);
+
+  // Stable callback refs for child components
+  const handleCloseSettings = useCallback(() => setIsSettingsOpen(false), []);
+  const handleCloseRightSidebar = useCallback(() => setIsRightSidebarOpen(false), []);
+  const handleNoteClick = useCallback((note) => selectFile({ path: note.path, name: note.title }), [selectFile]);
 
   return (
     <div className="flex flex-col h-screen bg-primary text-normal font-sans">
@@ -164,7 +173,7 @@ function App() {
 
       <SettingsModal
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={handleCloseSettings}
         settings={settings}
         onUpdateSettings={updateSetting}
       />
@@ -354,8 +363,8 @@ function App() {
             basePath={basePath}
             currentPath={currentFile?.path}
             isOpen={isRightSidebarOpen && !isZenMode}
-            onClose={() => setIsRightSidebarOpen(false)}
-            onNoteClick={(note) => selectFile({ path: note.path, name: note.title })}
+            onClose={handleCloseRightSidebar}
+            onNoteClick={handleNoteClick}
             width={rightSidebarWidth}
           />
         )}

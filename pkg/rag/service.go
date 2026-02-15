@@ -2,9 +2,9 @@ package rag
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
-
-	// "strconv"
 	"strings"
 	"sync"
 	"time"
@@ -101,10 +101,10 @@ func (s *Service) Query(ctx context.Context, query string) (*ChatResponse, error
 	}
 
 	// Step 3: Build context from retrieved chunks
-	context := s.buildContext(similarChunks)
+	ragContext := s.buildContext(similarChunks)
 
 	// Step 4: Generate completion with context
-	messages := s.buildMessages(query, context, ragConfig)
+	messages := s.buildMessages(query, ragContext, ragConfig)
 
 	completion, err := s.llm.GenerateCompletion(&ai.CompletionRequest{
 		Messages:    messages,
@@ -142,8 +142,8 @@ func (s *Service) buildContext(chunks []database.SimilarChunk) string {
 		sourceNum := i + 1
 		sb.WriteString(fmt.Sprintf("[Source %d] ", sourceNum))
 
-		// Add file title and heading
-		if chunk.File.Title != "" {
+		// Add file title and heading (nil-safe)
+		if chunk.File != nil && chunk.File.Title != "" {
 			sb.WriteString(chunk.File.Title)
 		}
 		if chunk.Heading != "" {
@@ -182,26 +182,29 @@ func (s *Service) buildMessages(query, context string, ragConfig config.RAGConfi
 func (s *Service) buildSources(chunks []database.SimilarChunk) []ChunkRef {
 	sources := make([]ChunkRef, 0, len(chunks))
 	for _, chunk := range chunks {
-		sources = append(sources, ChunkRef{
-			Path:       chunk.File.Path,
-			Title:      chunk.File.Title,
+		ref := ChunkRef{
 			Content:    chunk.Content,
 			Heading:    chunk.Heading,
 			Similarity: chunk.Similarity,
 			ChunkID:    chunk.ChunkID,
-		})
+		}
+		if chunk.File != nil {
+			ref.Path = chunk.File.Path
+			ref.Title = chunk.File.Title
+		}
+		sources = append(sources, ref)
 	}
 	return sources
 }
 
-// generateMessageID generates a unique message ID
+// generateMessageID generates a unique message ID using crypto/rand
 func generateMessageID() string {
-	return fmt.Sprintf("msg_%d", timestamp())
-}
-
-// timestamp returns current Unix timestamp in milliseconds
-func timestamp() int64 {
-	return time.Now().UnixMilli()
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback to timestamp if crypto/rand fails
+		return fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	}
+	return "msg_" + hex.EncodeToString(b)
 }
 
 func truncateContent(content string, max int) string {

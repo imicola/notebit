@@ -193,6 +193,13 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode, fileTree, onSe
     return m;
   }, []);
 
+  // Memoize rendered HTML to avoid re-rendering markdown on every state change
+  const renderedHtml = useMemo(() => {
+    return DOMPurify.sanitize(md.render(content || ''), {
+      ADD_ATTR: ['target', 'class']
+    });
+  }, [content, md]);
+
   // Save handler using ref to avoid stale closure
   const handleSave = useCallback(() => {
     if (viewRef.current) {
@@ -336,8 +343,9 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode, fileTree, onSe
     return () => {
       editorScroller.removeEventListener('scroll', handleEditorScroll);
       previewScroller.removeEventListener('scroll', handlePreviewScroll);
+      clearTimeout(timeoutRef.current);
     };
-  }, [viewMode, content]);
+  }, [viewMode]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -398,11 +406,7 @@ const Editor = ({ content, onChange, onSave, filename, isZenMode, fileTree, onSe
                 viewMode === 'edit' ? "hidden" : (viewMode === 'split' ? "w-1/2" : "w-full"),
                 isZenMode && "bg-primary"
             )}>
-                <div dangerouslySetInnerHTML={{ 
-                    __html: DOMPurify.sanitize(md.render(content || ''), {
-                        ADD_ATTR: ['target', 'class'] // Allow target="_blank" and classes for styling
-                    }) 
-                }} />
+                <div dangerouslySetInnerHTML={{ __html: renderedHtml }} />
             </div>
         </div>
       </div>

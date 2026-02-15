@@ -277,14 +277,41 @@ func (c *Config) LoadFromFile(path string) error {
 		return err
 	}
 
+	// Detect which fields are explicitly set in JSON using raw map
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(data, &rawMap); err != nil {
+		return err
+	}
+
 	// Create a temporary config to unmarshal into
 	temp := Config{}
 	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
 
+	// Track which top-level sections exist in the JSON
+	_, hasChunking := rawMap["chunking"]
+	_, hasWatcher := rawMap["watcher"]
+	_, hasGraph := rawMap["graph"]
+	_, hasAI := rawMap["ai"]
+
+	// Parse sub-fields to detect boolean presence
+	var chunkingRaw, watcherRaw, graphRaw, aiRaw map[string]json.RawMessage
+	if hasChunking {
+		_ = json.Unmarshal(rawMap["chunking"], &chunkingRaw)
+	}
+	if hasWatcher {
+		_ = json.Unmarshal(rawMap["watcher"], &watcherRaw)
+	}
+	if hasGraph {
+		_ = json.Unmarshal(rawMap["graph"], &graphRaw)
+	}
+	if hasAI {
+		_ = json.Unmarshal(rawMap["ai"], &aiRaw)
+	}
+
 	// Merge with defaults (keep defaults for unset fields)
-	c.mergeWithDefaults(&temp)
+	c.mergeWithDefaults(&temp, chunkingRaw, watcherRaw, graphRaw, aiRaw)
 
 	return nil
 }
@@ -319,8 +346,10 @@ func (c *Config) Save() error {
 	return c.SaveToFile(path)
 }
 
-// mergeWithDefaults merges loaded config with defaults
-func (c *Config) mergeWithDefaults(loaded *Config) {
+// mergeWithDefaults merges loaded config with defaults.
+// Boolean fields are only updated when explicitly present in JSON (raw maps) to prevent
+// false zero-values from overwriting true defaults.
+func (c *Config) mergeWithDefaults(loaded *Config, chunkingRaw, watcherRaw, graphRaw, aiRaw map[string]json.RawMessage) {
 	// AI Provider
 	if loaded.AI.Provider != "" {
 		c.AI.Provider = loaded.AI.Provider
@@ -361,6 +390,9 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 	if loaded.AI.VectorSearchEngine != "" {
 		c.AI.VectorSearchEngine = loaded.AI.VectorSearchEngine
 	}
+	if _, ok := aiRaw["vector_dimension"]; ok && loaded.AI.VectorDimension > 0 {
+		c.AI.VectorDimension = loaded.AI.VectorDimension
+	}
 
 	// Chunking Config
 	if loaded.Chunking.Strategy != "" {
@@ -378,21 +410,27 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 	if loaded.Chunking.MaxChunkSize > 0 {
 		c.Chunking.MaxChunkSize = loaded.Chunking.MaxChunkSize
 	}
-	// Always load boolean and string values
-	c.Chunking.PreserveHeading = loaded.Chunking.PreserveHeading
+	// Always load boolean and string values - only override if explicitly set in JSON
+	if _, ok := chunkingRaw["preserve_heading"]; ok {
+		c.Chunking.PreserveHeading = loaded.Chunking.PreserveHeading
+	}
 	if loaded.Chunking.HeadingSeparator != "" {
 		c.Chunking.HeadingSeparator = loaded.Chunking.HeadingSeparator
 	}
 
-	// Watcher Config
-	c.Watcher.Enabled = loaded.Watcher.Enabled
+	// Watcher Config - only override booleans if explicitly set in JSON
+	if _, ok := watcherRaw["enabled"]; ok {
+		c.Watcher.Enabled = loaded.Watcher.Enabled
+	}
 	if loaded.Watcher.DebounceMS > 0 {
 		c.Watcher.DebounceMS = loaded.Watcher.DebounceMS
 	}
 	if loaded.Watcher.Workers > 0 {
 		c.Watcher.Workers = loaded.Watcher.Workers
 	}
-	c.Watcher.FullIndexOnStart = loaded.Watcher.FullIndexOnStart
+	if _, ok := watcherRaw["full_index_on_start"]; ok {
+		c.Watcher.FullIndexOnStart = loaded.Watcher.FullIndexOnStart
+	}
 
 	// LLM Config
 	if loaded.LLM.Provider != "" {
@@ -446,7 +484,9 @@ func (c *Config) mergeWithDefaults(loaded *Config) {
 	if loaded.Graph.MaxNodes > 0 {
 		c.Graph.MaxNodes = loaded.Graph.MaxNodes
 	}
-	c.Graph.ShowImplicitLinks = loaded.Graph.ShowImplicitLinks
+	if _, ok := graphRaw["show_implicit_links"]; ok {
+		c.Graph.ShowImplicitLinks = loaded.Graph.ShowImplicitLinks
+	}
 }
 
 // SetOpenAIConfig sets the OpenAI configuration
@@ -562,24 +602,22 @@ func (c *Config) SetChunkingConfig(cfg ChunkingConfig) {
 	c.Chunking = cfg
 }
 
-// ModelDimensions returns the expected output dimension for a given model
+// ModelDimensions returns the expected output dimension for a given model.
+// For the canonical dimension map, see ai.LookupModelDimension().
+// This method exists for backward compatibility when ai package is not accessible.
 func (c *Config) ModelDimensions(model string) int {
-	// Known model dimensions
-	dimensions := map[string]int{
-		// OpenAI models
-		"text-embedding-3-small": 1536,
-		"text-embedding-3-large": 3072,
-		"text-embedding-ada-002": 1536,
-
-		// Ollama models
-		"nomic-embed-text":  768,
-		"mxbai-embed-large": 1024,
-		"all-minilm":        384,
-		"llama2":            4096, // fallback
-	}
-
-	if dim, ok := dimensions[model]; ok {
-		return dim
+	// Common models for quick lookup without importing ai package (avoids cycle)
+	switch model {
+	case "text-embedding-3-small", "text-embedding-ada-002":
+		return 1536
+	case "text-embedding-3-large":
+		return 3072
+	case "nomic-embed-text":
+		return 768
+	case "mxbai-embed-large":
+		return 1024
+	case "all-minilm":
+		return 384
 	}
 	return 1536 // Default fallback
 }

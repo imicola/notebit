@@ -55,22 +55,3 @@ export const createAsyncHandler = (asyncFn, options = {}) => {
   };
 };
 
-/**
- * Hook-like factory for creating handlers with shared state setters
- * Useful when you have multiple handlers using the same loading/error state
- *
- * @param {Object} stateSetters - Shared state setters
- * @param {Function} stateSetters.setLoading - Set loading state
- * @param {Function} stateSetters.setError - Set error state
- * @returns {Function} Factory function to create handlers
- */
-export const createAsyncHandlerFactory = (stateSetters) => {
-  return (asyncFn, options = {}) => {
-    return createAsyncHandler(asyncFn, {
-      ...stateSetters,
-      ...options
-    });
-  };
-};
-
-export default createAsyncHandler;

@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-react';
 import clsx from 'clsx';
 
-const FileTreeRow = ({ node, level, isExpanded, isSelected, isFocused, onToggle, onSelect }) => {
+const FileTreeRow = memo(({ node, level, isExpanded, isSelected, isFocused, onToggle, onSelect }) => {
   const handleClick = (e) => {
     e.stopPropagation();
     if (node.isDir) {
@@ -41,7 +41,7 @@ const FileTreeRow = ({ node, level, isExpanded, isSelected, isFocused, onToggle,
       <span className="truncate">{node.name}</span>
     </div>
   );
-};
+});
 
 const FileTree = ({ tree, onSelect, selectedPath }) => {
   const [expandedPaths, setExpandedPaths] = useState(new Set());
@@ -63,16 +63,18 @@ const FileTree = ({ tree, onSelect, selectedPath }) => {
     }
   }, [selectedPath]);
 
-  const toggleExpand = (node) => {
-    const newExpanded = new Set(expandedPaths);
-    if (newExpanded.has(node.path)) {
-      newExpanded.delete(node.path);
-    } else {
-      newExpanded.add(node.path);
-    }
-    setExpandedPaths(newExpanded);
+  const toggleExpand = useCallback((node) => {
+    setExpandedPaths(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(node.path)) {
+        newExpanded.delete(node.path);
+      } else {
+        newExpanded.add(node.path);
+      }
+      return newExpanded;
+    });
     setFocusedPath(node.path);
-  };
+  }, []);
 
   // Flatten the tree based on expanded state
   const visibleNodes = useMemo(() => {
@@ -165,6 +167,11 @@ const FileTree = ({ tree, onSelect, selectedPath }) => {
     }
   };
 
+  const handleSelect = useCallback((n) => {
+    onSelect(n);
+    setFocusedPath(n.path);
+  }, [onSelect]);
+
   if (!tree) {
     return (
       <div className="h-full flex items-center justify-center text-muted text-sm p-5">
@@ -189,10 +196,7 @@ const FileTree = ({ tree, onSelect, selectedPath }) => {
           isSelected={selectedPath === node.path}
           isFocused={focusedPath === node.path}
           onToggle={toggleExpand}
-          onSelect={(n) => {
-            onSelect(n);
-            setFocusedPath(n.path);
-          }}
+          onSelect={handleSelect}
         />
       ))}
     </div>

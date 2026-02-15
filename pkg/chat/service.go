@@ -25,6 +25,9 @@ import (
 const (
 	SyncModeLocal = "local"
 	SyncModeCloud = "cloud"
+
+	DefaultSessionTitle = "默认会话"
+	NewSessionTitle     = "新会话"
 )
 
 type StorageOptions struct {
@@ -88,13 +91,14 @@ type MessageListResult struct {
 }
 
 type Service struct {
-	db       *gorm.DB
-	basePath string
-	mu       sync.RWMutex
-	options  StorageOptions
-	key      []byte
-	stopCh   chan struct{}
-	doneCh   chan struct{}
+	db        *gorm.DB
+	basePath  string
+	mu        sync.RWMutex
+	options   StorageOptions
+	key       []byte
+	stopCh    chan struct{}
+	doneCh    chan struct{}
+	closeOnce sync.Once
 }
 
 func NewService(db *gorm.DB, basePath string) (*Service, error) {
@@ -123,14 +127,21 @@ func NewService(db *gorm.DB, basePath string) (*Service, error) {
 }
 
 func (s *Service) Close() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.stopCh != nil {
-		close(s.stopCh)
-		<-s.doneCh
+	s.closeOnce.Do(func() {
+		s.mu.Lock()
+		stopCh := s.stopCh
+		doneCh := s.doneCh
 		s.stopCh = nil
 		s.doneCh = nil
-	}
+		s.mu.Unlock()
+
+		if stopCh != nil {
+			close(stopCh)
+			if doneCh != nil {
+				<-doneCh
+			}
+		}
+	})
 }
 
 func (s *Service) autoMigrate() error {
@@ -291,7 +302,7 @@ func (s *Service) SetStorageOptions(opts StorageOptions) error {
 func (s *Service) CreateSession(title, category string, tags []string) (*SessionListItem, error) {
 	now := time.Now().UnixMilli()
 	if strings.TrimSpace(title) == "" {
-		title = "新会话"
+		title = NewSessionTitle
 	}
 	session := Session{
 		ID:            uuid.NewString(),
@@ -320,10 +331,10 @@ func (s *Service) EnsureDefaultSession() (*SessionListItem, error) {
 	if err == nil {
 		return s.GetSession(session.ID)
 	}
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	return s.CreateSession("默认会话", "", nil)
+	return s.CreateSession(DefaultSessionTitle, "", nil)
 }
 
 func (s *Service) GetSession(sessionID string) (*SessionListItem, error) {
@@ -725,9 +736,12 @@ func (s *Service) BackupNow(ctx context.Context) (string, error) {
 		return "", err
 	}
 	filePath := filepath.Join(backupDir, fmt.Sprintf("chat_backup_%s.json", time.Now().Format("20060102_150405")))
+	s.mu.RLock()
+	syncMode := s.options.SyncMode
+	s.mu.RUnlock()
 	b, _ := json.MarshalIndent(map[string]any{
 		"created_at": time.Now().UnixMilli(),
-		"sync_mode":  s.options.SyncMode,
+		"sync_mode":  syncMode,
 		"sessions":   dump,
 	}, "", "  ")
 	if err := os.WriteFile(filePath, b, 0644); err != nil {

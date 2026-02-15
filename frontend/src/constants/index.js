@@ -62,13 +62,6 @@ export const DEFAULT_SETTINGS = {
   fontText: FONTS_TEXT[0].value
 };
 
-// Keyboard shortcuts
-export const SHORTCUTS = {
-  TOGGLE_ZEN_MODE: 'F11',
-  COMMAND_PALETTE: 'Cmd+K',
-  SAVE_FILE: 'Cmd+S'
-};
-
 // Semantic search constants
 export const SEMANTIC_SEARCH = {
   DEBOUNCE_MS: 500,

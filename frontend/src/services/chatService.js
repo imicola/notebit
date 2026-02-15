@@ -7,7 +7,6 @@ import {
   DeleteChatSession,
   SetChatSessionArchived,
   SetChatSessionFavorite,
-  SetChatSessionCategory,
   SetChatSessionTags,
   ExportChatSession,
   BackupChatNow,
@@ -66,10 +65,6 @@ export const chatService = {
     return wrap('setFavorite', () => SetChatSessionFavorite(sessionId, favorite));
   },
 
-  setCategory(sessionId, category) {
-    return wrap('setCategory', () => SetChatSessionCategory(sessionId, category));
-  },
-
   setTags(sessionId, tags = []) {
     return wrap('setTags', () => SetChatSessionTags(sessionId, tags));
   },
@@ -97,5 +92,3 @@ export const chatService = {
     ));
   },
 };
-
-export default chatService;

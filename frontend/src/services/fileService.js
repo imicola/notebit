@@ -17,7 +17,7 @@ import {
 /**
  * Custom error class for file operations
  */
-export class FileServiceError extends Error {
+class FileServiceError extends Error {
   constructor(operation, originalError) {
     super(`File operation failed: ${operation}`);
     this.name = 'FileServiceError';
@@ -117,5 +117,3 @@ export const fileService = {
     return wrapCall('getBasePath', GetBasePath);
   }
 };
-
-export default fileService;

@@ -7,7 +7,7 @@ import { FindSimilar, GetSimilarityStatus } from '../../wailsjs/go/main/App';
 /**
  * Custom error class for similarity operations
  */
-export class SimilarityServiceError extends Error {
+class SimilarityServiceError extends Error {
   constructor(operation, originalError) {
     super(`Similarity operation failed: ${operation}`);
     this.name = 'SimilarityServiceError';
@@ -43,5 +43,3 @@ export const similarityService = {
     return wrapCall('getStatus', GetSimilarityStatus);
   },
 };
-
-export default similarityService;

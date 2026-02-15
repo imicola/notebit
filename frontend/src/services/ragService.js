@@ -9,7 +9,7 @@ import { EventsOn } from '../../wailsjs/runtime/runtime';
 /**
  * Custom error class for RAG operations
  */
-export class RAGServiceError extends Error {
+class RAGServiceError extends Error {
   constructor(operation, originalError) {
     super(`RAG operation failed: ${operation}`);
     this.name = 'RAGServiceError';
@@ -52,5 +52,3 @@ export const ragService = {
     return EventsOn('rag_chunk', callback);
   },
 };
-
-export default ragService;

@@ -56,13 +56,23 @@ func (m *Manager) MigrateToVec(ctx context.Context) error {
 	}
 
 	var processed int64
-	offset := 0
+	var skipped int64
+	batchGuard := int(totalCount/int64(batchSize)) + 10
+	if batchGuard < 10 {
+		batchGuard = 10
+	}
+	batches := 0
 
 	for {
+		batches++
+		if batches > batchGuard {
+			return &DatabaseError{Op: "migrate_to_vec", Err: fmt.Errorf("migration safety guard triggered after %d batches", batches)}
+		}
+
 		var chunks []Chunk
 		if err := db.Where("embedding_blob IS NOT NULL AND vec_indexed = ?", false).
 			Limit(batchSize).
-			Offset(offset).
+			Offset(0). // Always offset 0: processed rows are marked vec_indexed=true
 			Find(&chunks).Error; err != nil {
 			return &DatabaseError{Op: "fetch_chunks", Err: err}
 		}
@@ -74,7 +84,18 @@ func (m *Manager) MigrateToVec(ctx context.Context) error {
 		// Process batch in transaction
 		if err := db.Transaction(func(tx *gorm.DB) error {
 			for _, chunk := range chunks {
+				markIndexed := func() error {
+					if err := tx.Model(&Chunk{}).Where("id = ?", chunk.ID).Update("vec_indexed", true).Error; err != nil {
+						return fmt.Errorf("mark chunk %d vec_indexed: %w", chunk.ID, err)
+					}
+					return nil
+				}
+
 				if len(chunk.EmbeddingBlob) == 0 {
+					if err := markIndexed(); err != nil {
+						return err
+					}
+					skipped++
 					continue
 				}
 
@@ -83,7 +104,11 @@ func (m *Manager) MigrateToVec(ctx context.Context) error {
 				if len(embedding) == 0 {
 					logger.WarnWithFields(ctx, map[string]interface{}{
 						"chunk_id": chunk.ID,
-					}, "Empty embedding after decoding, skipping")
+					}, "Empty embedding after decoding, marking as indexed")
+					if err := markIndexed(); err != nil {
+						return err
+					}
+					skipped++
 					continue
 				}
 
@@ -93,35 +118,36 @@ func (m *Manager) MigrateToVec(ctx context.Context) error {
 						"chunk_id": chunk.ID,
 						"error":    err.Error(),
 					}, "Failed to insert into vec_chunks, skipping")
+					if err := markIndexed(); err != nil {
+						return err
+					}
+					skipped++
 					continue
 				}
 
-				// Mark as indexed
-				if err := tx.Model(&Chunk{}).Where("id = ?", chunk.ID).Update("vec_indexed", true).Error; err != nil {
-					return fmt.Errorf("update vec_indexed flag: %w", err)
+				if err := markIndexed(); err != nil {
+					return err
 				}
-
 				processed++
 			}
 			return nil
 		}); err != nil {
 			logger.ErrorWithFields(ctx, map[string]interface{}{
-				"offset": offset,
-				"error":  err.Error(),
+				"error": err.Error(),
 			}, "Batch migration failed")
 			return &DatabaseError{Op: "migrate_batch", Err: err}
 		}
 
 		// Log progress
-		if processed%1000 == 0 || processed == totalCount {
+		total := processed + skipped
+		if total%1000 == 0 || total == totalCount {
 			logger.InfoWithFields(ctx, map[string]interface{}{
 				"processed": processed,
+				"skipped":   skipped,
 				"total":     totalCount,
-				"progress":  fmt.Sprintf("%.1f%%", float64(processed)/float64(totalCount)*100),
+				"progress":  fmt.Sprintf("%.1f%%", float64(total)/float64(totalCount)*100),
 			}, "Vec migration progress")
 		}
-
-		// Continue to next batch (don't increment offset since processed rows are now vec_indexed=true)
 	}
 
 	logger.InfoWithDuration(ctx, timer(), "Vec migration completed: %d chunks migrated", processed)

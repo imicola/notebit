@@ -190,36 +190,11 @@ func (p *OllamaProvider) GenerateEmbeddingsBatch(texts []string) ([]*EmbeddingRe
 
 // GetModelDimension returns the output dimension for a given model
 func (p *OllamaProvider) GetModelDimension(model string) (int, error) {
-	return p.getKnownModelDimension(model), nil
-}
-
-// getKnownModelDimension returns known dimensions for common models
-func (p *OllamaProvider) getKnownModelDimension(model string) int {
-	dimensions := map[string]int{
-		"nomic-embed-text":  768,
-		"mxbai-embed-large": 1024,
-		"all-minilm":        384,
-		"llama2":            4096, // fallback for LLaMA models
-		"mistral":           4096,
-		"mixtral":           4096,
-		"codellama":         4096,
-		"phi":               2048,
-		"gemma":             2048,
-		"gemma2":            2048,
+	if dim, ok := LookupModelDimension(model); ok {
+		return dim, nil
 	}
-
-	if dim, ok := dimensions[model]; ok {
-		return dim
-	}
-
-	// Try to extract base model name (remove :tag suffix)
-	baseName := strings.Split(model, ":")[0]
-	if dim, ok := dimensions[baseName]; ok {
-		return dim
-	}
-
-	// Default fallback
-	return 768
+	// Default fallback for Ollama models
+	return 768, nil
 }
 
 // GetDefaultModel returns the default model name

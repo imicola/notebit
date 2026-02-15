@@ -7,7 +7,7 @@ import { GetGraphData } from '../../wailsjs/go/main/App';
 /**
  * Custom error class for graph operations
  */
-export class GraphServiceError extends Error {
+class GraphServiceError extends Error {
   constructor(operation, originalError) {
     super(`Graph operation failed: ${operation}`);
     this.name = 'GraphServiceError';
@@ -116,5 +116,3 @@ export const graphService = {
     };
   },
 };
-
-export default graphService;

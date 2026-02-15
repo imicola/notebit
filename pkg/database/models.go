@@ -38,16 +38,14 @@ type Chunk struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Content fields
-	FileID uint  `gorm:"not null;index" json:"file_id"`
-	File   *File `gorm:"constraint:OnDelete:CASCADE" json:"-"`
-	// ChunkIndex   int    `json:"chunk_index"`                    // Position in file
+	FileID  uint   `gorm:"not null;index" json:"file_id"`
+	File    *File  `gorm:"constraint:OnDelete:CASCADE" json:"-"`
 	Content string `gorm:"type:text" json:"content"` // Text content
 	Heading string `json:"heading"`                  // Associated heading (if any)
 
-	// Vector field - using JSON serialization for modernc.org/sqlite compatibility
-	// TODO: Migrate to sqlite-vec extension when available for native vector operations
-	Embedding          []float32  `gorm:"type:json;serializer:json" json:"embedding"` // Legacy: Vector array for similarity search
-	EmbeddingBlob      []byte     `gorm:"type:blob" json:"-"`                         // Optimized: Binary storage for fast retrieval
+	// Vector fields
+	Embedding          []float32  `gorm:"type:json;serializer:json" json:"embedding"` // Legacy JSON storage (fallback)
+	EmbeddingBlob      []byte     `gorm:"type:blob" json:"-"`                         // Binary storage for vec_chunks migration
 	EmbeddingModel     string     `gorm:"size:64" json:"embedding_model"`             // Model name/version
 	EmbeddingCreatedAt *time.Time `json:"embedding_created_at"`                       // NULL until embedded
 	VecIndexed         bool       `gorm:"index;default:false" json:"vec_indexed"`     // Whether embedding is written to vec_chunks

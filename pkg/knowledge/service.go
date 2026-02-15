@@ -70,8 +70,8 @@ func (s *Service) ReindexAllWithEmbeddings() (map[string]interface{}, error) {
 
 	return map[string]interface{}{
 		"total":     progress.Total,
-		"processed": progress.Processed,
-		"failed":    progress.Errors,
+		"processed": progress.Processed.Load(),
+		"failed":    progress.Errors.Load(),
 	}, nil
 }
 

@@ -218,6 +218,33 @@ func (a *App) initializeChat() {
 	a.chatSvc = svc
 }
 
+// initializeServices sets up database, pipeline, knowledge, chat, RAG, and graph
+// services for the given base path. This is the single entry point used by
+// OpenFolder, SetFolder, and startup to avoid duplicated initialization logic.
+func (a *App) initializeServices(basePath string) error {
+	// Initialize database
+	if err := a.dbm.Init(basePath); err != nil {
+		logger.Warn("Database initialization failed for %s: %v", basePath, err)
+	}
+	a.applyVectorEngineConfig()
+
+	// Initialize pipeline, knowledge, and chat after database is ready
+	if a.dbm.IsInitialized() {
+		if a.pipeline == nil {
+			a.pipeline = indexing.NewPipeline(a.ai, a.dbm.Repository(), a.fm)
+			a.pipeline.Start()
+		}
+		if a.ks == nil {
+			a.ks = knowledge.NewService(a.fm, a.dbm, a.ai, a.pipeline)
+		}
+		a.initializeChat()
+	}
+
+	a.initializeRAG()
+	a.initializeGraph()
+	return nil
+}
+
 // startWatcher starts the file watcher service
 func (a *App) startWatcher() error {
 	watcherCfg := a.cfg.GetWatcherConfig()

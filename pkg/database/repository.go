@@ -13,6 +13,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// headingRegex matches the first markdown heading (e.g., "# Title").
+var headingRegex = regexp.MustCompile(`^#\s+(.+)$`)
+
 // Repository provides data access methods
 type Repository struct {
 	db           *gorm.DB
@@ -95,13 +98,17 @@ func (r *Repository) ListFilesWithChunks() ([]File, error) {
 // DeleteFile removes a file from the index (cascade deletes chunks)
 func (r *Repository) DeleteFile(path string) error {
 	var chunkIDs []uint
-	_ = r.db.Model(&Chunk{}).
+	if err := r.db.Model(&Chunk{}).
 		Joins("JOIN files ON files.id = chunks.file_id").
 		Where("files.path = ?", path).
-		Pluck("chunks.id", &chunkIDs).Error
+		Pluck("chunks.id", &chunkIDs).Error; err != nil {
+		logger.Warn("failed to query chunk IDs for deletion: %v", err)
+	}
 
 	if len(chunkIDs) > 0 {
-		_ = r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", chunkIDs).Error
+		if err := r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", chunkIDs).Error; err != nil {
+			logger.Warn("failed to delete vec_chunks entries: %v", err)
+		}
 	}
 
 	err := r.db.Where("path = ?", path).Delete(&File{}).Error
@@ -186,9 +193,13 @@ func (r *Repository) GetChunkByID(chunkID uint) (*Chunk, error) {
 // DeleteChunksForFile removes all chunks associated with a file
 func (r *Repository) DeleteChunksForFile(fileID uint) error {
 	var oldIDs []uint
-	_ = r.db.Model(&Chunk{}).Where("file_id = ?", fileID).Pluck("id", &oldIDs).Error
+	if err := r.db.Model(&Chunk{}).Where("file_id = ?", fileID).Pluck("id", &oldIDs).Error; err != nil {
+		logger.Warn("failed to query chunk IDs for file %d: %v", fileID, err)
+	}
 	if len(oldIDs) > 0 {
-		_ = r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", oldIDs).Error
+		if err := r.db.Exec("DELETE FROM vec_chunks WHERE chunk_id IN ?", oldIDs).Error; err != nil {
+			logger.Warn("failed to delete vec_chunks for file %d: %v", fileID, err)
+		}
 	}
 
 	err := r.db.Where("file_id = ?", fileID).Delete(&Chunk{}).Error
@@ -235,15 +246,11 @@ func extractTitle(path, content string) string {
 	content = strings.ReplaceAll(content, "\r\n", "\n")
 
 	// Try to find first heading (markdown # heading)
-	re := regexp.MustCompile(`^#\s+(.+)$`)
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
-		if re.MatchString(line) {
-			matches := re.FindStringSubmatch(line)
-			if len(matches) > 1 {
-				return strings.TrimSpace(matches[1])
-			}
+		if matches := headingRegex.FindStringSubmatch(line); len(matches) > 1 {
+			return strings.TrimSpace(matches[1])
 		}
 	}
 
@@ -360,7 +367,9 @@ func (r *Repository) IndexFileWithChunks(path, content string, lastModified int6
 	}
 
 	var vecTableExists bool
-	_ = tx.Raw("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='vec_chunks'").Scan(&vecTableExists).Error
+	if err := tx.Raw("SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name='vec_chunks'").Scan(&vecTableExists).Error; err != nil {
+		logger.Warn("failed to check vec_chunks table existence: %v", err)
+	}
 
 	// Create new chunks with embeddings
 	now := r.db.NowFunc()
