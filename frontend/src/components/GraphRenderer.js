@@ -4,58 +4,50 @@ export const createNodePainter = ({ hoverNode, highlightNodes, themeColors }) =>
 		const isHighlight = highlightNodes.has(node.id);
 		const label = node.label;
 		const fontSize = 12 / globalScale;
-		const radius = Math.sqrt(node.val) * 2;
-
-		if (isHover) {
-			const time = Date.now();
-			const rippleRadius = radius + (Math.sin(time / 200) + 1) * 5;
-			ctx.beginPath();
-			ctx.arc(node.x, node.y, rippleRadius, 0, 2 * Math.PI, false);
-			ctx.strokeStyle = node.color;
-			ctx.globalAlpha = 0.3;
-			ctx.stroke();
-			ctx.globalAlpha = 1;
-		}
-
-		ctx.shadowColor = node.color;
-		ctx.shadowBlur = isHover ? 15 : 5;
 		
+		// Obsidian-style: Cleaner sizes
+		let radius = Math.sqrt(node.val) * 1.5;
+		if (isHover) radius *= 1.2;
+
+		// 1. Draw Node
 		ctx.beginPath();
 		ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-		ctx.fillStyle = node.color;
-
-		const gradientKey = `${node.color}:${radius}`;
-		if (node.__gradientKey !== gradientKey || !node.__gradient) {
-			const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, radius);
-			gradient.addColorStop(0, 'rgba(255,255,255,0.8)');
-			gradient.addColorStop(0.5, node.color);
-			gradient.addColorStop(1, node.color);
-			node.__gradient = gradient;
-			node.__gradientKey = gradientKey;
+		
+		// Color logic
+		if (isHover) {
+			ctx.fillStyle = themeColors.highlight;
+		} else if (isHighlight) {
+			ctx.fillStyle = themeColors.text; // Highlighted neighbors are bright
+		} else {
+			ctx.fillStyle = node.color;
 		}
-		ctx.fillStyle = node.__gradient || node.color;
 		
-		ctx.fill();
-		
-		ctx.shadowBlur = 0;
+		// Optional: subtle border for better contrast on dark bg if needed
+		// ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+		// ctx.lineWidth = 0.5 / globalScale;
+		// ctx.stroke();
 
-		if (isHover || isHighlight || globalScale > 1.5 || node.type === 'concept') {
+		ctx.fill();
+
+		// 2. Draw Label
+		// Show label if hovered, highlighted, or zoomed in enough, or if it's a major node (concept)
+		const showLabel = isHover || isHighlight || globalScale > 1.2 || (node.type === 'concept' && globalScale > 0.8);
+		
+		if (showLabel) {
 			ctx.font = `${fontSize}px Sans-Serif`;
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
-			ctx.fillStyle = themeColors.text;
 			
-			const textWidth = ctx.measureText(label).width;
-			const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
-			const labelY = node.y + radius + 2;
-			node.__bckgDimensions = bckgDimensions;
-			ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-			ctx.fillRect(node.x - bckgDimensions[0] / 2, labelY, bckgDimensions[0], bckgDimensions[1]);
+			const labelY = node.y + radius + (fontSize * 0.8);
 			
-			ctx.fillStyle = themeColors.text;
-			ctx.fillText(label, node.x, labelY + fontSize / 2);
-		} else {
-			node.__bckgDimensions = null;
+			// Outline for readability instead of box
+			ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+			ctx.lineWidth = 3 / globalScale;
+			ctx.lineJoin = 'round';
+			ctx.strokeText(label, node.x, labelY);
+			
+			ctx.fillStyle = isHover ? themeColors.highlight : themeColors.text;
+			ctx.fillText(label, node.x, labelY);
 		}
 	};
 };
@@ -64,13 +56,22 @@ export const createLinkPainter = ({ highlightLinks, themeColors }) => {
 	return (link, ctx, globalScale) => {
 		const isHighlight = highlightLinks.has(link);
 		
+		// Don't draw invisible links to save performance
+		if (!isHighlight && globalScale < 0.5) return;
+
 		ctx.beginPath();
 		ctx.moveTo(link.source.x, link.source.y);
 		ctx.lineTo(link.target.x, link.target.y);
 		
-		ctx.strokeStyle = isHighlight ? themeColors.linkHighlight : themeColors.link;
-		ctx.lineWidth = isHighlight ? 2 / globalScale : 1 / globalScale;
-		ctx.globalAlpha = isHighlight ? 0.8 : 0.4;
+		if (isHighlight) {
+			ctx.strokeStyle = themeColors.highlight; // or themeColors.linkHighlight
+			ctx.lineWidth = 1.5 / globalScale;
+			ctx.globalAlpha = 0.8;
+		} else {
+			ctx.strokeStyle = themeColors.link;
+			ctx.lineWidth = 0.5 / globalScale; // Thinner lines
+			ctx.globalAlpha = 0.6; // themeColors.link should already have low opacity, but ensuring here
+		}
 		
 		ctx.stroke();
 		ctx.globalAlpha = 1;
@@ -80,14 +81,10 @@ export const createLinkPainter = ({ highlightLinks, themeColors }) => {
 export const createNodePointerAreaPaint = () => {
 	return (node, color, ctx) => {
 		ctx.fillStyle = color;
-		const bckgDimensions = node.__bckgDimensions;
-		if (bckgDimensions) {
-			const radius = Math.sqrt(node.val) * 2;
-			const labelY = node.y + radius + 2;
-			ctx.fillRect(node.x - bckgDimensions[0] / 2, labelY, bckgDimensions[0], bckgDimensions[1]);
-		}
+		// Expanded hit area for easier selection
+		const radius = Math.sqrt(node.val) * 1.5;
 		ctx.beginPath();
-		ctx.arc(node.x, node.y, Math.sqrt(node.val) * 2 + 2, 0, 2 * Math.PI, false);
+		ctx.arc(node.x, node.y, radius + 4, 0, 2 * Math.PI, false);
 		ctx.fill();
 	};
 };

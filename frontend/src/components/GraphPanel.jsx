@@ -25,14 +25,14 @@ export default function GraphPanel() {
 	// --- Theme Configuration ---
 	const isDark = theme !== 'light';
 	const themeColors = useMemo(() => ({
-		background: isDark ? 'rgba(0,0,0,0)' : '#ffffff', // Transparent to let container bg show
-		concept: isDark ? '#00D4FF' : '#0066CC', // Aurora Blue / Tech Blue
-		note: isDark ? '#00FF88' : '#00AA44',    // Emerald Green / Green
-		tag: isDark ? '#FF6B35' : '#FF8C00',     // Neon Orange / Amber
-		link: isDark ? 'rgba(0, 212, 255, 0.2)' : 'rgba(0, 102, 204, 0.2)',
-		linkHighlight: isDark ? '#00D4FF' : '#0066CC',
-		text: isDark ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.8)',
-		particle: isDark ? '#ffffff' : '#000000',
+		background: isDark ? 'rgba(0,0,0,0)' : '#ffffff', 
+		concept: isDark ? '#d4d4d4' : '#555555', // Light Grey (Obsidian-like default)
+		note: isDark ? '#9ca3af' : '#777777',    // Muted Grey
+		tag: isDark ? '#6b7280' : '#999999',     // Darker Grey
+		link: isDark ? 'rgba(100, 100, 100, 0.2)' : 'rgba(200, 200, 200, 0.3)',
+		linkHighlight: isDark ? '#ffffff' : '#000000',
+		text: isDark ? '#e5e5e5' : '#333333',
+		highlight: isDark ? '#a855f7' : '#7c3aed', // Purple accent for highlights
 	}), [isDark]);
 
 	// --- Resize Handler ---
@@ -74,11 +74,11 @@ export default function GraphPanel() {
 			// We need to ensure nodes and links are mutable objects
 			const nodes = (data?.nodes || []).map(n => ({
 				...n,
-				// Assign color based on type
+				// Assign color based on type - Obsidian style: mostly grey/white, maybe purple for focus
 				color: n.type === 'concept' ? themeColors.concept :
 					   n.type === 'tag' ? themeColors.tag :
 					   themeColors.note,
-				val: n.type === 'concept' ? 20 : (n.size * 2 + 5) // Size based on connections
+				val: n.type === 'concept' ? 15 : (Math.sqrt(n.size || 1) * 3 + 2) // Smaller, more uniform sizes
 			}));
 
 			const links = (data?.links || []).map(l => ({
@@ -193,20 +193,28 @@ export default function GraphPanel() {
 	};
 
 	return (
-		<div className="flex flex-col h-full bg-secondary">
-			{/* Header */}
-			<div className="px-4 py-3 bg-secondary border-b border-modifier-border flex justify-between items-center z-10">
-				<div className="flex items-center gap-2">
-					<Globe className="text-obsidian-purple" size={18} />
-					<h2 className="text-sm font-semibold text-normal">Knowledge Graph</h2>
-				</div>
-				<div className="flex items-center gap-2">
-					<button onClick={loadGraph} className="p-1 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors" title="Reload Graph">
-						<RefreshCw size={14} />
+		<div className="flex flex-col h-full bg-secondary relative">
+			{/* Minimalist Header / Toolbar */}
+			<div className="absolute top-4 right-4 flex flex-col gap-2 z-10">
+				<div className="bg-primary-alt/80 backdrop-blur rounded-lg p-2 border border-modifier-border shadow-lg flex flex-col gap-2">
+					<button onClick={zoomIn} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors" title="Zoom In">
+						<ZoomIn size={18} />
 					</button>
-					<span className="text-xs text-muted border-l border-modifier-border pl-2">
-						{graphData.nodes.length} nodes
-					</span>
+					<button onClick={zoomOut} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors" title="Zoom Out">
+						<ZoomOut size={18} />
+					</button>
+					<button onClick={resetZoom} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors" title="Fit to Screen">
+						<Maximize2 size={18} />
+					</button>
+					<div className="h-px bg-modifier-border my-1"></div>
+					<button onClick={loadGraph} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors" title="Reload Graph">
+						<RefreshCw size={18} />
+					</button>
+				</div>
+				
+				{/* Node Count Badge */}
+				<div className="bg-primary-alt/80 backdrop-blur rounded-lg px-3 py-1 border border-modifier-border shadow-lg text-xs text-muted text-center">
+					{graphData.nodes.length} nodes
 				</div>
 			</div>
 
@@ -258,10 +266,7 @@ export default function GraphPanel() {
 
 					// Link Styling
 					linkCanvasObject={paintLink}
-					linkDirectionalParticles={2}
-					linkDirectionalParticleWidth={2}
-					linkDirectionalParticleSpeed={0.005}
-					linkDirectionalParticleColor={() => themeColors.particle}
+					// Removed particles for cleaner Obsidian look
 					
 					// Forces
 					d3AlphaDecay={0.02} // Slower decay = more movement
@@ -277,36 +282,9 @@ export default function GraphPanel() {
 					enablePanInteraction={true}
 				/>
 
-				{/* Controls Overlay */}
-				<div className="absolute bottom-4 right-4 flex flex-col gap-2 bg-primary-alt/80 backdrop-blur rounded-lg p-2 border border-modifier-border shadow-lg">
-					<button onClick={zoomIn} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors">
-						<ZoomIn size={18} />
-					</button>
-					<button onClick={zoomOut} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors">
-						<ZoomOut size={18} />
-					</button>
-					<button onClick={resetZoom} className="p-1.5 hover:bg-modifier-hover rounded text-muted hover:text-normal transition-colors">
-						<Maximize2 size={18} />
-					</button>
-				</div>
-
-				{/* Legend Overlay */}
-				<div className="absolute top-4 left-4 bg-primary-alt/80 backdrop-blur rounded-lg p-3 border border-modifier-border shadow-lg">
-					<div className="flex flex-col gap-2">
-						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,212,255,0.6)]" style={{ backgroundColor: themeColors.concept }}></div>
-							<span className="text-xs text-muted">Concept Node</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(0,255,136,0.6)]" style={{ backgroundColor: themeColors.note }}></div>
-							<span className="text-xs text-muted">Note Node</span>
-						</div>
-						<div className="flex items-center gap-2">
-							<div className="w-3 h-3 rounded-full shadow-[0_0_8px_rgba(255,107,53,0.6)]" style={{ backgroundColor: themeColors.tag }}></div>
-							<span className="text-xs text-muted">Tag Node</span>
-						</div>
-					</div>
-				</div>
+				{/* Controls Overlay - Moved to top right integrated toolbar */}
+				
+				{/* Legend Overlay - Removed for cleaner look */}
 			</div>
 		</div>
 	);
